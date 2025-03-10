@@ -17,6 +17,8 @@ typedef struct Proc {
   struct Proc *prev, *next;
 } Proc;
 
+static Proc *waitsend = NULL;
+static Proc *waitrecv = NULL;
 /* Return Proc struct related to the lua_State */
 static Proc *getself(lua_State *L)
 {
@@ -26,7 +28,7 @@ static Proc *getself(lua_State *L)
   lua_pop(L,1);
   return p;
 }
-
+/*-------------------------------------------------------------*/
 /* Send data between states */
 static void move_values(lua_State *send, lua_State *recv)
 {
@@ -35,7 +37,63 @@ static void move_values(lua_State *send, lua_State *recv)
     lua_pushstring(recv, lua_tostring(send, i));
   }
 }
-
+/*-------------------------------------------------------------*/
+/* Find waiting for data transfer process */
+static Proc *findmatch(const char *channel, Proc **list)
+{
+  Proc *node = *list;
+  if (node == NULL) return NULL; // List is empty
+  while (node != *list) {
+    if (!(strcmp(channel, node->channel))) {
+      if (*list == node) {
+        *list = (node->next == node) ? NULL : node->next;
+      }
+      node->prev->next = node->next;
+      node->next->prev = node->prev;
+      return node;
+    }
+    node = node->next;
+  }
+  return NULL;
+}
+/*-------------------------------------------------------------*/
+/* Add process to waiting list */
+static void waitonlist(lua_State *L, const char *channel, Proc **list)
+{
+  Proc *p = getself(L);
+  /* Link itself at the end of list */
+  if (*list == NULL) {
+    *list = p;
+    p->prev = p->next = p;
+  } else {
+    p->prev = (*list)->prev;
+    p->next = *list;
+    p->prev->next = p->next->prev = p;
+  }
+  p->channel = channel;
+  while (p->channel) {
+    pthread_cond_wait(&p->cond, &mutex);
+  }
+}
+/*-------------------------------------------------------------*/
+/* Send string */
+static int l_send(lua_State *L)
+{
+  Proc *p;
+  const char *channel = luaL_checkstring(L, 1);
+  pthread_mutex_lock(&mutex);
+  p = findmatch(channel, &waitrecv);
+  if (p) {
+    move_values(L, p->L);
+    p->channel = NULL;
+    pthread_cond_signal(&p->cond);
+  } else {
+    waitonlist(L, channel, &waitsend);
+  }
+  pthread_mutex_unlock(&mutex);
+  return 0;
+}
+/*-------------------------------------------------------------*/
 static int l_dir(lua_State *L)
 {
   DIR *dir;
@@ -58,7 +116,7 @@ static int l_dir(lua_State *L)
   closedir(dir);
   return 1;
 }
-
+/*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
   {"dir", l_dir},
   {NULL, NULL}
