@@ -15,7 +15,7 @@ int main(int argc, char **argv)
   if (!nob_mkdir_if_not_exists(BUILD_FOLFER)) return 1;
   if (!nob_mkdir_if_not_exists(OBJ_FOLDER)) return 1;
 
-  nob_cmd_append(&cmd, "gcc");
+  nob_cmd_append(&cmd, "gcc", "-pthread");
   nob_cmd_append(&cmd, "-Wall", "-Wextra", "-fPIC", "-c");
   nob_cmd_append(&cmd, SRC_FOLDER"fio.c", "-o", OBJ_FOLDER"fio.o");
   if (!nob_cmd_run_sync(cmd)) return 1;

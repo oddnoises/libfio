@@ -7,6 +7,8 @@
 #include <lua5.4/lua.h>
 #include <lua5.4/lualib.h>
 
+int luaopen_fio(lua_State *L);
+
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct Proc {
@@ -77,7 +79,7 @@ static void waitonlist(lua_State *L, const char *channel, Proc **list)
 }
 /*-------------------------------------------------------------*/
 /* Send string */
-static int l_send(lua_State *L)
+static int fio_send(lua_State *L)
 {
   Proc *p;
   const char *channel = luaL_checkstring(L, 1);
@@ -94,13 +96,64 @@ static int l_send(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
+/* Recv string */
+static int fio_recv(lua_State *L)
+{
+  Proc *p;
+  const char *channel = luaL_checkstring(L, 1);
+  lua_settop(L, 1);
+  pthread_mutex_lock(&mutex);
+  p = findmatch(channel, &waitrecv);
+  if (p) {
+    move_values(p->L, L);
+    p->channel = NULL;
+    pthread_cond_signal(&p->cond);
+  } else {
+    waitonlist(L, channel, &waitrecv);
+  }
+  pthread_mutex_unlock(&mutex);
+  return lua_gettop(L) - 1;
+}
+/*-------------------------------------------------------------*/
+static void *fio_thread(void *arg)
+{
+  lua_State *L = (lua_State *) arg;
+  luaL_openlibs(L);
+  luaL_requiref(L, "fio", luaopen_fio, 1);
+  lua_pop(L, 1);
+  if (lua_pcall(L, 0, 0, 0))
+    fprintf(stderr, "Fio error: %s", lua_tostring(L, -1));
+  pthread_cond_destroy(&getself(L)->cond);
+  lua_close(L);
+  return NULL;
+}
+/*-------------------------------------------------------------*/
+static int fio_start(lua_State *L)
+{
+  pthread_t thread;
+  const char *lua_code = luaL_checkstring(L, 1);
+  lua_State *L1 = luaL_newstate();
+  if (L1 == NULL) luaL_error(L, "Can't create new Lua state!");
+  if (luaL_loadstring(L1, lua_code))
+    luaL_error(L, "Error running new Lua state: %s", lua_tostring(L1, -1));
+  if (pthread_create(&thread, NULL, fio_thread, L1))
+    luaL_error(L, "Can't create new thread");
+  pthread_detach(thread);
+  return 0;
+}
+/*-------------------------------------------------------------*/
+static int fio_exit()
+{
+  pthread_exit(NULL);
+  return 0;
+}
+/*-------------------------------------------------------------*/
 static int l_dir(lua_State *L)
 {
   DIR *dir;
   struct dirent *entry;
   int i = 1;
   const char *path = luaL_checkstring(L, 1);
-
   dir = opendir(path);
   if (dir == NULL) {
     lua_pushnil(L);
@@ -118,10 +171,14 @@ static int l_dir(lua_State *L)
 }
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
+  {"start", fio_start},
+  {"exit", fio_exit},
+  {"send", fio_send},
+  {"recv", fio_recv},
   {"dir", l_dir},
   {NULL, NULL}
 };
-
+/*-------------------------------------------------------------*/
 int luaopen_fio(lua_State *L)
 {
   luaL_newlib(L, fio);
