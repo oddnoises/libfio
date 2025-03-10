@@ -181,6 +181,12 @@ static const struct luaL_Reg fio [] = {
 /*-------------------------------------------------------------*/
 int luaopen_fio(lua_State *L)
 {
+  Proc *self = (Proc *) lua_newuserdata(L, sizeof(Proc));
+  lua_setfield(L, LUA_REGISTRYINDEX, "_SELF");
+  self->L = L;
+  self->thread = pthread_self();
+  self->channel = NULL;
+  pthread_cond_init(&self->cond, NULL);
   luaL_newlib(L, fio);
   return 1;
 }
