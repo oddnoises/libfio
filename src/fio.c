@@ -131,10 +131,10 @@ static void *fio_thread(void *arg)
 static int fio_start(lua_State *L)
 {
   pthread_t thread;
-  const char *lua_code = luaL_checkstring(L, 1);
+  const char *fname = luaL_checkstring(L, 1);
   lua_State *L1 = luaL_newstate();
   if (L1 == NULL) luaL_error(L, "Can't create new Lua state!");
-  if (luaL_loadstring(L1, lua_code))
+  if (luaL_loadfile(L1, fname))
     luaL_error(L, "Error running new Lua state: %s", lua_tostring(L1, -1));
   if (pthread_create(&thread, NULL, fio_thread, L1))
     luaL_error(L, "Can't create new thread");

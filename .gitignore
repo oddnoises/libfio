@@ -3,4 +3,4 @@
 obj/
 build/
 !nob.c
-
+!nob.h

@@ -1,6 +1,6 @@
 #define NOB_IMPLEMENTATION
 
-#include "build/nob.h"
+#include "nob.h"
 
 #define BUILD_FOLFER  "build/"
 #define SRC_FOLDER    "src/"
@@ -21,7 +21,7 @@ int main(int argc, char **argv)
   if (!nob_cmd_run_sync(cmd)) return 1;
   
   cmd.count = 0;
-  nob_cmd_append(&cmd, "gcc");
+  nob_cmd_append(&cmd, "gcc", "-pthread");
   nob_cmd_append(&cmd, "-Wall", "-Wextra", "-shared");
   nob_cmd_append(&cmd, "-o", BUILD_FOLFER"fio.so", OBJ_FOLDER"fio.o");
   if (!nob_cmd_run_sync(cmd)) return 1;
