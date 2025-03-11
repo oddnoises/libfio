@@ -1,0 +1,6 @@
+/nob
+/nob.old
+obj/
+build/
+!nob.c
+!nob.h
