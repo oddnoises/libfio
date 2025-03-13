@@ -14,9 +14,6 @@ int luaopen_fio(lua_State *L);
 typedef struct Proc {
   lua_State *L;
   pthread_t thread;
-  pthread_cond_t cond;
-  const char *channel;
-  struct Proc *prev, *next;
 } Proc;
 
 /*-------------------------------------------------------------*/
@@ -87,8 +84,6 @@ int luaopen_fio(lua_State *L)
   lua_setfield(L, LUA_REGISTRYINDEX, "_SELF");
   self->L = L;
   self->thread = pthread_self();
-  self->channel = NULL;
-  pthread_cond_init(&self->cond, NULL);
   luaL_newlib(L, fio);
   return 1;
 }
