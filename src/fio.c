@@ -81,14 +81,14 @@ static int fio_start(lua_State *L)
 /*-------------------------------------------------------------*/
 static int fio_join(lua_State *L)
 {
-  pthread_t thread = lua_tointeger(L, 1);
+  pthread_t thread = luaL_checkinteger(L, 1);
   pthread_join(thread, NULL);
   return 0;
 }
 /*-------------------------------------------------------------*/
 static int fio_detach(lua_State *L)
 {
-  pthread_t thread = lua_tointeger(L, 1);
+  pthread_t thread = luaL_checkinteger(L, 1);
   pthread_detach(thread);
   return 0;
 }
