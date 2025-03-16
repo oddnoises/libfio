@@ -97,6 +97,8 @@ static int fio_detach(lua_State *L)
 /*-------------------------------------------------------------*/
 static int fio_mutex_create(lua_State *L)
 {
+  pthread_mutex_t mutex;
+  const char *mutex_name = luaL_checkstring(L, 1);
   return 0;
 }
 /*-------------------------------------------------------------*/
