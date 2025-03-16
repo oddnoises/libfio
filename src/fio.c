@@ -8,6 +8,7 @@
 #include <lua5.4/lua.h>
 #include <lua5.4/lualib.h>
 
+static int luaopen_fio(lua_State *L);
 static void *fio_thread(void *arg);
 static int fio_start(lua_State *L);
 static int fio_join(lua_State *L);
@@ -41,7 +42,7 @@ static const struct luaL_Reg fio [] = {
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
-int luaopen_fio(lua_State *L)
+static int luaopen_fio(lua_State *L)
 {
   Proc *self = (Proc *) lua_newuserdata(L, sizeof(Proc));
   lua_setfield(L, LUA_REGISTRYINDEX, "_SELF");
@@ -68,13 +69,14 @@ static int fio_start(lua_State *L)
 {
   pthread_t thread;
   const char *fname = luaL_checkstring(L, 1);
-  lua_State *L1 = luaL_newstate();
+  // Для разделяемых данных попробовать заменить на lua_newthread()
+  lua_State *L1 = luaL_newstate();  
   if (L1 == NULL) luaL_error(L, "Can't create new Lua state!");
   if (luaL_loadfile(L1, fname)) // Возможно, стоит заменить на loadbuffer в будущем
     luaL_error(L, "Error running new Lua state: %s", lua_tostring(L1, -1));
   if (pthread_create(&thread, NULL, fio_thread, L1))
     luaL_error(L, "Can't create new thread");
-//  pthread_detach(thread);
+  //pthread_detach(thread);
   lua_pushinteger(L, thread); // Возвращает идентификатор потока
   return 1;
 }
