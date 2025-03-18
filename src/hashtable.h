@@ -58,3 +58,14 @@ typedef struct HashTableConf_s {
   void *(*mem_calloc) (size_t blocks, size_t size);
   void (*mem_free) (void *block);
 } HashTableConf;
+
+enum ht_stat ht_new(HashTable_s **out);
+enum ht_stat ht_new_conf(HashTableConf const *const conf, HashTable_s **out);
+void ht_conf_init(HashTableConf *conf);
+enum ht_stat ht_add(HashTable_s *table, void *key, void *val);
+enum ht_stat ht_get(HashTable_s *table, void *key, void **out);
+enum ht_stat ht_remove(HashTable_s *table, void *key, void **out);
+void ht_remove_all(HashTable_s *table);
+void ht_destroy(HashTable_s *table);
+bool ht_contains_key(HashTable_s *table, void *key);
+size_t string_hash(const void *key, int len, u_int32_t seed);
