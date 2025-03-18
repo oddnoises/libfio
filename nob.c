@@ -9,6 +9,7 @@
 int main(int argc, char **argv)
 {
   NOB_GO_REBUILD_URSELF(argc, argv);
+  int res;
 
   Nob_Cmd cmd = {0};
 
@@ -20,15 +21,15 @@ int main(int argc, char **argv)
   nob_cmd_append(&cmd, SRC_FOLDER"fio.c", "-o", OBJ_FOLDER"fio.o");
   if (!nob_cmd_run_sync(cmd)) return 1;
 
-  cmd.count = 0;
-  nob_cmd_append(&cmd, "gcc", "-Wall", "-Wextra", "-c");
-  nob_cmd_append(&cmd, SRC_FOLDER"hashtable.c", "-o", OBJ_FOLDER"hashtable.o");
-  if (nob_cmd_run_sync(cmd)) return 1;
-  
+//  cmd.count = 0;
+//  nob_cmd_append(&cmd, "gcc", "-Wall", "-Wextra", "-fPIC", "-c");
+//  nob_cmd_append(&cmd, SRC_FOLDER"hashtable.c", "-o", OBJ_FOLDER"hashtable.o");
+//  if (!nob_cmd_run_sync(cmd)) return 1;
+
   cmd.count = 0;
   nob_cmd_append(&cmd, "gcc", "-pthread");
   nob_cmd_append(&cmd, "-Wall", "-Wextra", "-shared");
-  nob_cmd_append(&cmd, "-o", BUILD_FOLFER"fio.so", OBJ_FOLDER"fio.o", OBJ_FOLDER"hashtable.o");
+  nob_cmd_append(&cmd, "-o", BUILD_FOLFER"fio.so", OBJ_FOLDER"fio.o");
   if (!nob_cmd_run_sync(cmd)) return 1;
   return 0;
 }
