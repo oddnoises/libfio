@@ -15,7 +15,7 @@ static int fio_start(lua_State *L);
 static int fio_join(lua_State *L);
 static int fio_detach(lua_State *L);
 static int fio_mutex_create(lua_State *L);
-static void fio_mutex_lock();
+static int fio_mutex_lock();
 static void fio_mutex_unlock();
 static int fio_exit();
 static int l_dir(lua_State *L);
@@ -130,13 +130,25 @@ static int fio_mutex_destroy(lua_State *L)
   res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
     luaL_error(L, "Error getting mutex [%s] from table: %d", mutex_name, res);
-
+  pthread_mutex_destroy(&mutex_struct->mutex);
+  free(mutex_struct->name);
+  free(mutex_struct);
+  res = ht_remove(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
+  if (res)
+    luaL_error(L, "Error deleting mutex entry [%s] from table: %d", mutex_name, res);
   return 0;
 }
 /*-------------------------------------------------------------*/
-static void fio_mutex_lock()
+static int fio_mutex_lock(lua_State *L)
 {
+  Mutex_s *mutex_struct;
+  const char *mutex_name = luaL_checkstring(L, 1);
+  int res;
+  res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
+  if (res)
+    luaL_error(L, "Error get mutex [%s] while lock it: %d", mutex_name, res);
 
+  return 0;
 }
 /*-------------------------------------------------------------*/
 static void fio_mutex_unlock()
