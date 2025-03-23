@@ -9,16 +9,16 @@
 #include <lua5.4/lualib.h>
 #include "hashtable.h"
 
-static int luaopen_fio(lua_State *L);
+int luaopen_fio(lua_State *L);
 static void *fio_thread(void *arg);
-static int fio_start(lua_State *L);
-static int fio_join(lua_State *L);
-static int fio_detach(lua_State *L);
-static int fio_mutex_create(lua_State *L);
-static int fio_mutex_destroy(lua_State *L);
-static int fio_mutex_lock();
-static int fio_mutex_unlock();
-static int fio_exit();
+int fio_start(lua_State *L);
+int fio_join(lua_State *L);
+int fio_detach(lua_State *L);
+int fio_mutex_create(lua_State *L);
+int fio_mutex_destroy(lua_State *L);
+int fio_mutex_lock();
+int fio_mutex_unlock();
+int fio_exit();
 //static int l_dir(lua_State *L);
 static void init_table();
 
@@ -34,7 +34,7 @@ typedef struct {
 } Mutex_s;
 
 pthread_once_t once_variable = PTHREAD_ONCE_INIT;
-static HashTable_s *MutexTable = NULL;
+HashTable_s *MutexTable = NULL;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
@@ -49,7 +49,7 @@ static const struct luaL_Reg fio [] = {
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
-static int luaopen_fio(lua_State *L)
+int luaopen_fio(lua_State *L)
 {
   Proc *self = (Proc *) lua_newuserdata(L, sizeof(Proc));
   lua_setfield(L, LUA_REGISTRYINDEX, "_SELF");
@@ -59,7 +59,7 @@ static int luaopen_fio(lua_State *L)
   return 1;
 }
 /*-------------------------------------------------------------*/
-static void *fio_thread(void *arg)
+void *fio_thread(void *arg)
 {
   lua_State *L = (lua_State *) arg;
   luaL_openlibs(L);
@@ -72,7 +72,7 @@ static void *fio_thread(void *arg)
 }
 /*-------------------------------------------------------------*/
 /* Запускает новый поток и возвращает его идентификатор */
-static int fio_start(lua_State *L)
+int fio_start(lua_State *L)
 {
   pthread_t thread;
   const char *fname = luaL_checkstring(L, 1);
@@ -88,21 +88,21 @@ static int fio_start(lua_State *L)
   return 1;
 }
 /*-------------------------------------------------------------*/
-static int fio_join(lua_State *L)
+int fio_join(lua_State *L)
 {
   pthread_t thread = luaL_checkinteger(L, 1);
   pthread_join(thread, NULL);
   return 0;
 }
 /*-------------------------------------------------------------*/
-static int fio_detach(lua_State *L)
+int fio_detach(lua_State *L)
 {
   pthread_t thread = luaL_checkinteger(L, 1);
   pthread_detach(thread);
   return 0;
 }
 /*-------------------------------------------------------------*/
-static int fio_mutex_create(lua_State *L)
+int fio_mutex_create(lua_State *L)
 {
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
@@ -126,7 +126,7 @@ static int fio_mutex_create(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-static int fio_mutex_destroy(lua_State *L)
+int fio_mutex_destroy(lua_State *L)
 {
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
@@ -143,7 +143,7 @@ static int fio_mutex_destroy(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-static int fio_mutex_lock(lua_State *L)
+int fio_mutex_lock(lua_State *L)
 {
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
@@ -157,7 +157,7 @@ static int fio_mutex_lock(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-static int fio_mutex_unlock(lua_State *L)
+int fio_mutex_unlock(lua_State *L)
 {
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
@@ -172,7 +172,7 @@ static int fio_mutex_unlock(lua_State *L)
 }
 /*-------------------------------------------------------------*/
 /* Если главный поток завершит работу, дочерние не перестанут выполняться */
-static int fio_exit()
+int fio_exit()
 {
   pthread_exit(NULL);
   return 0;
