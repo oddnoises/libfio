@@ -14,6 +14,7 @@ static void *fio_thread(void *arg);
 int fio_start(lua_State *L);
 int fio_join(lua_State *L);
 int fio_detach(lua_State *L);
+int fio_getself(lua_State *L);
 int fio_mutex_create(lua_State *L);
 int fio_mutex_destroy(lua_State *L);
 int fio_mutex_lock();
@@ -42,6 +43,7 @@ static const struct luaL_Reg fio [] = {
   {"exit", fio_exit},
   {"join", fio_join},
   {"detach", fio_detach},
+  {"getself", fio_getself},
   {"mutex_init", fio_mutex_create},
   {"mutex_destroy", fio_mutex_destroy},
   {"mutex_lock", fio_mutex_lock},
@@ -100,6 +102,14 @@ int fio_detach(lua_State *L)
   pthread_t thread = luaL_checkinteger(L, 1);
   pthread_detach(thread);
   return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_getself(lua_State *L)
+{
+  pthread_t thread;
+  thread = pthread_self();
+  lua_pushinteger(L, thread);
+  return 1;
 }
 /*-------------------------------------------------------------*/
 int fio_mutex_create(lua_State *L)
