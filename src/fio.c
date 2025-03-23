@@ -15,8 +15,9 @@ static int fio_start(lua_State *L);
 static int fio_join(lua_State *L);
 static int fio_detach(lua_State *L);
 static int fio_mutex_create(lua_State *L);
+static int fio_mutex_destroy(lua_State *L);
 static int fio_mutex_lock();
-static void fio_mutex_unlock();
+static int fio_mutex_unlock();
 static int fio_exit();
 static int l_dir(lua_State *L);
 static void init_table();
@@ -33,7 +34,7 @@ typedef struct {
 } Mutex_s;
 
 pthread_once_t once_variable = PTHREAD_ONCE_INIT;
-static HashTable_s *MutexTable;
+static HashTable_s *MutexTable = NULL;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
@@ -41,7 +42,10 @@ static const struct luaL_Reg fio [] = {
   {"exit", fio_exit},
   {"join", fio_join},
   {"detach", fio_detach},
-  {"dir", l_dir},
+  {"mutex_init", fio_mutex_create},
+  {"mutex_destroy", fio_mutex_destroy},
+  {"mutex_lock", fio_mutex_lock},
+  {"mutex_unlock", fio_mutex_unlock},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -146,14 +150,25 @@ static int fio_mutex_lock(lua_State *L)
   int res;
   res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
-    luaL_error(L, "Error get mutex [%s] while lock it: %d", mutex_name, res);
-
+    luaL_error(L, "Error get mutex [%s] while locking it: %d", mutex_name, res);
+  res = pthread_mutex_lock(&mutex_struct->mutex);
+  if (res)
+    luaL_error(L, "Error lock mutex [%s]: %s", mutex_name, strerror(errno));
   return 0;
 }
 /*-------------------------------------------------------------*/
-static void fio_mutex_unlock()
+static int fio_mutex_unlock(lua_State *L)
 {
-
+  Mutex_s *mutex_struct;
+  const char *mutex_name = luaL_checkstring(L, 1);
+  int res;
+  res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
+  if (res)
+    luaL_error(L, "Error get mutex [%s] while unlocking it: %d", mutex_name, res);
+  res = pthread_mutex_unlock(&mutex_struct->mutex);
+  if (res)
+    luaL_error(L, "Error lock mutex [%s]: %s", mutex_name, strerror(errno));
+  return 0;
 }
 /*-------------------------------------------------------------*/
 /* Если главный поток завершит работу, дочерние не перестанут выполняться */
