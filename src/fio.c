@@ -19,7 +19,7 @@ static int fio_mutex_destroy(lua_State *L);
 static int fio_mutex_lock();
 static int fio_mutex_unlock();
 static int fio_exit();
-static int l_dir(lua_State *L);
+//static int l_dir(lua_State *L);
 static void init_table();
 
 typedef struct {
@@ -178,6 +178,7 @@ static int fio_exit()
   return 0;
 }
 /*-------------------------------------------------------------*/
+/*
 static int l_dir(lua_State *L)
 {
   DIR *dir;
@@ -199,6 +200,7 @@ static int l_dir(lua_State *L)
   closedir(dir);
   return 1;
 }
+*/
 /*-------------------------------------------------------------*/
 static void init_table()
 {
