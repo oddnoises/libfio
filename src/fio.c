@@ -1,4 +1,4 @@
-#include <dirent.h>
+//#include <dirent.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
