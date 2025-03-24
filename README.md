@@ -1,6 +1,6 @@
 # Fio
 
-Fio is a multithreading library for Lua. It can create POSIX threads, provides basic synchronisation mechanism. Fio is designed to be as simple as posible to provide simple and easy to learn examples of using Lua API.
+Fio is a multithreading library for Lua. It can create POSIX threads and provides basic synchronisation mechanism. Fio is designed to be as simple as posible to provide simple and easy to learn examples of using Lua API.
 
 Fio supports Lua 5.4 and requires only C compiler and the Lua interpreter itself.
 
@@ -18,7 +18,7 @@ This project uses a [nob](https://github.com/tsoding/nob.h) build system, so it 
 | Function | Description |
 | --- | --- |
 | `start("thread.lua")` | Creates a new POSIX thread that will execute the code from `thread.lua` file. This function returns thread id. |
-| `exit()` | Terminate current thread. This function must be called only from parent thread. |
+| `exit()` | Terminate current thread. This function __must__ be called only from parent thread. This is necessary to prevent early termination of child threads. |
 | `join(thread)` | Join the specified thread. |
 | `detach(thread)` | Detach the specified thread. |
 | `getself()` | Return own thread id. |
