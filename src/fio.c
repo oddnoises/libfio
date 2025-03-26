@@ -31,11 +31,18 @@ typedef struct {
 typedef struct {
   pthread_mutex_t mutex;
   char *name;
-  int users;
+  size_t users;
 } Mutex_s;
 
-pthread_once_t once_variable = PTHREAD_ONCE_INIT;
+typedef struct {
+  lua_State *shL;
+  size_t users;
+} Shm_s;
+
+pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
+pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 HashTable_s *MutexTable = NULL;
+HashTable_s *ShmTable = NULL;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
@@ -117,7 +124,7 @@ int fio_mutex_create(lua_State *L)
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
   int res;
-  res = pthread_once(&once_variable, init_table);
+  res = pthread_once(&mtx_once, init_table);
   if (res)
     luaL_error(L, "Error in pthread_once return %d value: %s", res, strerror(errno));
   res = ht_contains_key(MutexTable, (void*) mutex_name);
@@ -178,6 +185,12 @@ int fio_mutex_unlock(lua_State *L)
   res = pthread_mutex_unlock(&mutex_struct->mutex);
   if (res)
     luaL_error(L, "Error lock mutex [%s]: %s", mutex_name, strerror(errno));
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_open(lua_State *L)
+{
+  Shm_s *mem;
   return 0;
 }
 /*-------------------------------------------------------------*/
