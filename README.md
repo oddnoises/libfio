@@ -8,19 +8,18 @@ Fio supports Lua 5.4 and requires only C compiler and the Lua interpreter itself
 
 This project uses a [nob](https://github.com/tsoding/nob.h) build system, so it only requires a C compiler to build.
 
-1.
 ```bash
 git clone https://github.com/oddnoises/libfio.git
 ```
-2.
+
 ```bash
 cd fio
 ```
-3.
+
 ```bash
 cc nob.c -o nob
 ```
-4.
+
 ```bash
 ./nob
 ```
@@ -39,6 +38,8 @@ cc nob.c -o nob
 | `mutex_destroy("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
 | `mutex_lock("mutex_name")` | Locks specified mutex with a name __mutex_name__. |
 | `mutex_unlock("mutex_name")` | Unlocks specified mutex with a name __mutex_name__. |
+| `shm_open("shm_name")` | Create a shared memory object with a name __shm_name__. |
+| `shm_close("shm_name")` | Delete shared memory object with a name __shm_name__. |
 
 # Example of use
 Create two files __proc.lua__, __main.lua__ and run: `lua main.lua`
