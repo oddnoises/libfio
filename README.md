@@ -7,10 +7,23 @@ Fio supports Lua 5.4 and requires only C compiler and the Lua interpreter itself
 # Build
 
 This project uses a [nob](https://github.com/tsoding/nob.h) build system, so it only requires a C compiler to build.
-1. `git clone https://github.com/oddnoises/libfio.git`
-2. `cd fio`
-3. `cc nob.c -o nob`
-4. `./nob`
+
+1.
+```bash
+git clone https://github.com/oddnoises/libfio.git
+```
+2.
+```bash
+cd fio
+```
+3.
+```bash
+cc nob.c -o nob
+```
+4.
+```bash
+./nob
+```
 > You can modify `nob.c` and binary will rebuild itself on its own.
 
 # Module reference
