@@ -1,4 +1,3 @@
-//#include <dirent.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -20,8 +19,8 @@ int fio_mutex_destroy(lua_State *L);
 int fio_mutex_lock();
 int fio_mutex_unlock();
 int fio_exit();
-//static int l_dir(lua_State *L);
-static void init_table();
+static void init_mtx_table();
+static void init_shm_table();
 
 typedef struct {
   lua_State *L;
@@ -75,7 +74,7 @@ void *fio_thread(void *arg)
   luaL_requiref(L, "fio", luaopen_fio, 1);
   lua_pop(L, 1);
   if (lua_pcall(L, 0, 0, 0))
-    fprintf(stderr, "Fio error: %s", lua_tostring(L, -1));
+    fprintf(stderr, "Fio error: %s\n", lua_tostring(L, -1));
   lua_close(L);
   return NULL;
 }
@@ -87,11 +86,11 @@ int fio_start(lua_State *L)
   const char *fname = luaL_checkstring(L, 1);
   // Для разделяемых данных попробовать заменить на lua_newthread()
   lua_State *L1 = luaL_newstate();  
-  if (L1 == NULL) luaL_error(L, "Can't create new Lua state!");
+  if (L1 == NULL) luaL_error(L, "Can't create new Lua state!\n");
   if (luaL_loadfile(L1, fname)) // Возможно, стоит заменить на loadbuffer в будущем
-    luaL_error(L, "Error running new Lua state: %s", lua_tostring(L1, -1));
+    luaL_error(L, "Error running new Lua state: %s\n", lua_tostring(L1, -1));
   if (pthread_create(&thread, NULL, fio_thread, L1))
-    luaL_error(L, "Can't create new thread");
+    luaL_error(L, "Can't create new thread: %s\n", strerror(errno));
   //pthread_detach(thread);
   lua_pushinteger(L, thread); // Возвращает идентификатор потока
   return 1;
@@ -124,22 +123,22 @@ int fio_mutex_create(lua_State *L)
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
   int res;
-  res = pthread_once(&mtx_once, init_table);
+  res = pthread_once(&mtx_once, init_mtx_table);
   if (res)
-    luaL_error(L, "Error in pthread_once return %d value: %s", res, strerror(errno));
+    luaL_error(L, "Error in pthread_once return %d value: %s\n", res, strerror(errno));
   res = ht_contains_key(MutexTable, (void*) mutex_name);
   if (res)
-    luaL_error(L, "Mutex with name [%s] is already exists!", mutex_name);
+    luaL_error(L, "Mutex with name [%s] is already exists!\n", mutex_name);
   mutex_struct = malloc(sizeof(Mutex_s));
   if (!mutex_struct)
-    luaL_error(L, "Error allocate memory for mutex struct: %s", strerror(errno));
+    luaL_error(L, "Error allocate memory for mutex struct: %s\n", strerror(errno));
   res = pthread_mutex_init(&mutex_struct->mutex, NULL);
   if (res)
-    luaL_error(L, "Error init new mutex: %s", strerror(errno));
+    luaL_error(L, "Error init new mutex: %s\n", strerror(errno));
   mutex_struct->name = strdup(mutex_name);
   res = ht_add(MutexTable, (void*) mutex_name, mutex_struct);
   if (res)
-    luaL_error(L, "Can't add new mutex to global table: %d", res);
+    luaL_error(L, "Can't add new mutex to global table: %d\n", res);
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -150,13 +149,13 @@ int fio_mutex_destroy(lua_State *L)
   int res;
   res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
-    luaL_error(L, "Error getting mutex [%s] from table: %d", mutex_name, res);
+    luaL_error(L, "Error getting mutex [%s] from table: %d\n", mutex_name, res);
   pthread_mutex_destroy(&mutex_struct->mutex);
   free(mutex_struct->name);
   free(mutex_struct);
   res = ht_remove(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
-    luaL_error(L, "Error deleting mutex entry [%s] from table: %d", mutex_name, res);
+    luaL_error(L, "Error deleting mutex entry [%s] from table: %d\n", mutex_name, res);
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -167,10 +166,10 @@ int fio_mutex_lock(lua_State *L)
   int res;
   res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
-    luaL_error(L, "Error get mutex [%s] while locking it: %d", mutex_name, res);
+    luaL_error(L, "Error get mutex [%s] while locking it: %d\n", mutex_name, res);
   res = pthread_mutex_lock(&mutex_struct->mutex);
   if (res)
-    luaL_error(L, "Error lock mutex [%s]: %s", mutex_name, strerror(errno));
+    luaL_error(L, "Error lock mutex [%s]: %s\n", mutex_name, strerror(errno));
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -181,16 +180,48 @@ int fio_mutex_unlock(lua_State *L)
   int res;
   res = ht_get(MutexTable, (void*) mutex_name, (void*) &mutex_struct);
   if (res)
-    luaL_error(L, "Error get mutex [%s] while unlocking it: %d", mutex_name, res);
+    luaL_error(L, "Error get mutex [%s] while unlocking it: %d\n", mutex_name, res);
   res = pthread_mutex_unlock(&mutex_struct->mutex);
   if (res)
-    luaL_error(L, "Error lock mutex [%s]: %s", mutex_name, strerror(errno));
+    luaL_error(L, "Error lock mutex [%s]: %s\n", mutex_name, strerror(errno));
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_shm_open(lua_State *L)
 {
-  Shm_s *mem;
+  Shm_s *mem_struct;
+  const char *shm_name = luaL_checkstring(L, 1);
+  int res;
+  res = pthread_once(&shm_once, init_shm_table);
+  if (res)
+    luaL_error(L, "Error in pthread_once: %s: %d\n", strerror(errno), __LINE__);
+  res = ht_contains_key(ShmTable, (void*) shm_name);
+  if (res)
+    luaL_error(L, "Shm with name [%s] is already exists!\n", shm_name);
+  mem_struct = malloc(sizeof(Shm_s));
+  mem_struct->shL = luaL_newstate();
+  mem_struct->users = 1;
+  if (!mem_struct)
+    luaL_error(L, "Error allocate memory for shm struct: %s\n", strerror(errno));
+  res = ht_add(ShmTable, (void*) shm_name, (void*) &mem_struct);
+  if (res)
+    luaL_error(L, "Can't add new shm entry by key [%s]: %d\n", shm_name, res);
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_close(lua_State *L)
+{
+  Shm_s *mem_struct;
+  const char *shm_name = luaL_checkstring(L, 1);
+  int res;
+  res = ht_get(ShmTable, (void*) shm_name, (void*) mem_struct);
+  if (res)
+    luaL_error(L, "Error getting shm [%s] from table: %d\n", shm_name, res);
+  lua_close(mem_struct->shL);
+  free(mem_struct);
+  res = ht_remove(ShmTable, (void*) shm_name, (void*) &mem_struct);
+  if (res)
+    luaL_error(L, "Error deleting shm entry [%s] from table: %d\n", shm_name, res);
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -201,33 +232,14 @@ int fio_exit()
   return 0;
 }
 /*-------------------------------------------------------------*/
-/*
-static int l_dir(lua_State *L)
-{
-  DIR *dir;
-  struct dirent *entry;
-  int i = 1;
-  const char *path = luaL_checkstring(L, 1);
-  dir = opendir(path);
-  if (dir == NULL) {
-    lua_pushnil(L);
-    lua_pushstring(L, strerror(errno));
-    return 2;
-  }
-  lua_newtable(L);
-  while ((entry = readdir(dir)) != NULL) {
-    lua_pushnumber(L, i++);
-    lua_pushstring(L, entry->d_name);
-    lua_settable(L, -3);
-  }
-  closedir(dir);
-  return 1;
-}
-*/
-/*-------------------------------------------------------------*/
-static void init_table()
+static void init_mtx_table()
 {
   ht_new(&MutexTable);
+}
+/*-------------------------------------------------------------*/
+static void init_shm_table()
+{
+  ht_new(&ShmTable);
 }
 /*-------------------------------------------------------------*/
 
