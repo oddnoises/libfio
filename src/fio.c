@@ -19,6 +19,8 @@ int fio_mutex_destroy(lua_State *L);
 int fio_mutex_lock();
 int fio_mutex_unlock();
 int fio_exit();
+int fio_shm_open(lua_State *L);
+int fio_shm_get(lua_State *L);
 static void init_mtx_table();
 static void init_shm_table();
 
@@ -40,8 +42,8 @@ typedef struct {
 
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
-HashTable_s *MutexTable = NULL;
-HashTable_s *ShmTable = NULL;
+HashTable_s *MutexTable;
+static Shm_s SharedGlobal;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio [] = {
@@ -54,6 +56,8 @@ static const struct luaL_Reg fio [] = {
   {"mutex_destroy", fio_mutex_destroy},
   {"mutex_lock", fio_mutex_lock},
   {"mutex_unlock", fio_mutex_unlock},
+  {"shm_set", fio_shm_open},
+  {"shm_get", fio_shm_get},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -187,49 +191,27 @@ int fio_mutex_unlock(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-int fio_shm_open(lua_State *L)
-{
-  Shm_s *mem_struct;
-  const char *shm_name = luaL_checkstring(L, 1);
-  int res;
-  res = pthread_once(&shm_once, init_shm_table);
-  if (res)
-    luaL_error(L, "Error in pthread_once: %s: %d\n", strerror(errno), __LINE__);
-  res = ht_contains_key(ShmTable, (void*) shm_name);
-  if (res)
-    luaL_error(L, "Shm with name [%s] is already exists!\n", shm_name);
-  mem_struct = malloc(sizeof(Shm_s));
-  mem_struct->shL = luaL_newstate();
-  mem_struct->users = 1;
-  if (!mem_struct)
-    luaL_error(L, "Error allocate memory for shm struct: %s\n", strerror(errno));
-  res = ht_add(ShmTable, (void*) shm_name, (void*) &mem_struct);
-  if (res)
-    luaL_error(L, "Can't add new shm entry by key [%s]: %d\n", shm_name, res);
-  return 0;
-}
-/*-------------------------------------------------------------*/
-int fio_shm_close(lua_State *L)
-{
-  Shm_s *mem_struct;
-  const char *shm_name = luaL_checkstring(L, 1);
-  int res;
-  res = ht_get(ShmTable, (void*) shm_name, (void*) mem_struct);
-  if (res)
-    luaL_error(L, "Error getting shm [%s] from table: %d\n", shm_name, res);
-  lua_close(mem_struct->shL);
-  free(mem_struct);
-  res = ht_remove(ShmTable, (void*) shm_name, (void*) &mem_struct);
-  if (res)
-    luaL_error(L, "Error deleting shm entry [%s] from table: %d\n", shm_name, res);
-  return 0;
-}
-/*-------------------------------------------------------------*/
 /* Если главный поток завершит работу, дочерние не перестанут выполняться */
 int fio_exit()
 {
   pthread_exit(NULL);
   return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_open(lua_State *L)
+{
+  const char *Gname = luaL_checkstring(L, 1);
+  pthread_once(&shm_once, init_shm_table);
+  lua_setglobal(SharedGlobal.shL, Gname);
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_get(lua_State *L)
+{
+  const char *Gname = luaL_checkstring(L, 1);
+  int ltype = lua_getglobal(SharedGlobal.shL, Gname);
+  lua_xmove(SharedGlobal.shL, L, 1);
+  return 1;
 }
 /*-------------------------------------------------------------*/
 static void init_mtx_table()
@@ -239,7 +221,7 @@ static void init_mtx_table()
 /*-------------------------------------------------------------*/
 static void init_shm_table()
 {
-  ht_new(&ShmTable);
+  SharedGlobal.shL = luaL_newstate();
 }
 /*-------------------------------------------------------------*/
 
