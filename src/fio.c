@@ -44,11 +44,9 @@ HashTable_s *MutexTable = NULL;
 HashTable_s *ShmTable = NULL;
 
 /*-------------------------------------------------------------*/
-static const struct luaL_Reg fio [] = {
+static const struct luaL_Reg fio_f [] = {
   {"start", fio_start},
   {"exit", fio_exit},
-  {"join", fio_join},
-  {"detach", fio_detach},
   {"getself", fio_getself},
   {"mutex_init", fio_mutex_create},
   {"mutex_destroy", fio_mutex_destroy},
@@ -57,13 +55,19 @@ static const struct luaL_Reg fio [] = {
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
+static const struct luaL_Reg fio_m [] = {
+  {"join", fio_join},
+  {"detach", fio_detach},
+  {NULL, NULL}
+};
+/*-------------------------------------------------------------*/
 int luaopen_fio(lua_State *L)
 {
-  Proc *self = (Proc *) lua_newuserdata(L, sizeof(Proc));
-  lua_setfield(L, LUA_REGISTRYINDEX, "_SELF");
-  self->L = L;
-  self->thread = pthread_self();
-  luaL_newlib(L, fio);
+  luaL_newmetatable(L, "fio.thread");
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_setfuncs(L, fio_m, 0);
+  luaL_newlib(L, fio_f);
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -79,34 +83,36 @@ void *fio_thread(void *arg)
   return NULL;
 }
 /*-------------------------------------------------------------*/
-/* Запускает новый поток и возвращает его идентификатор */
+/* Запускает новый поток и возвращает его идентификатор (в виде ligth userdata) */
 int fio_start(lua_State *L)
 {
-  pthread_t thread;
+  Proc *new_thread;
   const char *fname = luaL_checkstring(L, 1);
-  // Для разделяемых данных попробовать заменить на lua_newthread()
   lua_State *L1 = luaL_newstate();  
   if (L1 == NULL) luaL_error(L, "Can't create new Lua state!\n");
   if (luaL_loadfile(L1, fname)) // Возможно, стоит заменить на loadbuffer в будущем
     luaL_error(L, "Error running new Lua state: %s\n", lua_tostring(L1, -1));
-  if (pthread_create(&thread, NULL, fio_thread, L1))
+  new_thread = (Proc*) lua_newuserdata(L, sizeof(Proc));
+  new_thread->L = L;
+  if (pthread_create(&new_thread->thread, NULL, fio_thread, L1))
     luaL_error(L, "Can't create new thread: %s\n", strerror(errno));
   //pthread_detach(thread);
-  lua_pushinteger(L, thread); // Возвращает идентификатор потока
+  luaL_getmetatable(L, "fio.thread");
+  lua_setmetatable(L, -2);
   return 1;
 }
 /*-------------------------------------------------------------*/
 int fio_join(lua_State *L)
 {
-  pthread_t thread = luaL_checkinteger(L, 1);
-  pthread_join(thread, NULL);
+  Proc *this_thread = (Proc*) luaL_checkudata(L, 1, "fio.thread");
+  pthread_join(this_thread->thread, NULL);
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_detach(lua_State *L)
 {
-  pthread_t thread = luaL_checkinteger(L, 1);
-  pthread_detach(thread);
+  Proc *this_thread = (Proc*) luaL_checkudata(L, 1, "fio.thread");
+  pthread_detach(this_thread->thread);
   return 0;
 }
 /*-------------------------------------------------------------*/
