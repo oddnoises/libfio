@@ -31,8 +31,8 @@ cc nob.c -o nob
 | --- | --- |
 | `start("thread.lua")` | Creates a new POSIX thread that will execute the code from `thread.lua` file. This function returns thread id. |
 | `exit()` | Terminate current thread. This function __must__ be called only from parent thread. This is necessary to prevent early termination of child threads. |
-| `join(thread)` | Join the specified thread. |
-| `detach(thread)` | Detach the specified thread. |
+| `join()` | Join the specified thread. |
+| `detach()` | Detach the specified thread. |
 | `getself()` | Return own thread id. |
 | `mutex_init("mutex_name")` | Initializes a dynamic mutex with a name __mutex_name__. |
 | `mutex_destroy("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
@@ -51,7 +51,7 @@ local fio = require "fio"
 fio.mutex_init("mtxname")
 for i = 1, 100 do
     res = fio.start("proc.lua")
-    fio.detach(res)
+    res:detach(res)
 end
 print("Main thread finish executing")
 os.execute("sleep " .. tonumber(3))
