@@ -151,8 +151,16 @@ int fio_mutex_create(lua_State *L)
     return 1;
   }
   lua_pop(GlobalMutex, 1);
-
   mutex_struct = (Mutex_s*) lua_newuserdata(GlobalMutex, sizeof(Mutex_s));
+  res = pthread_mutex_init(&mutex_struct->mutex, NULL);
+  if (res)
+    luaL_error(L, "Error init new mutex: %s\n", strerror(errno));
+  lua_pushstring(GlobalMutex, mutex_name);
+  lua_pushvalue(GlobalMutex, -2);
+  lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
+  pthread_mutex_lock(&xmove_mutex);
+  lua_xmove(GlobalMutex, L, 1);
+  pthread_mutex_unlock(&xmove_mutex);
   return 1;
 }
 /*-------------------------------------------------------------*/
