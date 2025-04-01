@@ -35,13 +35,14 @@ typedef struct {
 
 typedef struct {
   lua_State *shL;
+  char *name;
   size_t users;
 } Shm_s;
 
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 lua_State *GlobalMutex = NULL;
-HashTable_s *ShmTable = NULL;
+lua_State *GlobalTable = NULL;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
@@ -50,6 +51,8 @@ static const struct luaL_Reg fio_f [] = {
   {"getself", fio_getself},
   {"mutex_open", fio_mutex_create},
   {"mutex_close", fio_mutex_destroy},
+  {"table_open", NULL},
+  {"table_close", NULL},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -65,6 +68,12 @@ static const struct luaL_Reg fio_m_mutex [] = {
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
+static const struct luaL_Reg fio_m_table [] = {
+  {"__newindex", NULL},
+  {"__index", NULL},
+  {NULL, NULL}
+};
+/*-------------------------------------------------------------*/
 int luaopen_fio(lua_State *L)
 {
   luaL_newmetatable(L, "fio.thread");
@@ -75,6 +84,8 @@ int luaopen_fio(lua_State *L)
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_setfuncs(L, fio_m_mutex, 0);
+  luaL_newmetatable(L, "fio.table");
+  luaL_setfuncs(L, fio_m_table, 0);
   luaL_newlib(L, fio_f);
   return 1;
 }
@@ -210,39 +221,30 @@ int fio_mutex_unlock(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_shm_open(lua_State *L)
 {
-  Shm_s *mem_struct;
-  const char *shm_name = luaL_checkstring(L, 1);
+  Shm_s *table_struct, *new_table;
+  const char *table_name = luaL_checkstring(L, 1);
   int res;
   res = pthread_once(&shm_once, init_shm_table);
   if (res)
-    luaL_error(L, "Error in pthread_once: %s: %d\n", strerror(errno), __LINE__);
-  res = ht_contains_key(ShmTable, (void*) shm_name);
-  if (res)
-    luaL_error(L, "Shm with name [%s] is already exists!\n", shm_name);
-  mem_struct = malloc(sizeof(Shm_s));
-  mem_struct->shL = luaL_newstate();
-  mem_struct->users = 1;
-  if (!mem_struct)
-    luaL_error(L, "Error allocate memory for shm struct: %s\n", strerror(errno));
-  res = ht_add(ShmTable, (void*) shm_name, (void*) &mem_struct);
-  if (res)
-    luaL_error(L, "Can't add new shm entry by key [%s]: %d\n", shm_name, res);
-  return 0;
+    luaL_error(L, "Error in pthread_once return %d: %s\n", res, strerror(errno));
+  lua_pushstring(GlobalTable, table_name);
+  lua_rawget(GlobalTable, LUA_REGISTRYINDEX);
+  if (!lua_isnil(GlobalTable, -1)) {
+    /* Table already exist, return obj */
+    table_struct = (Shm_s*) lua_touserdata(GlobalTable, 1);
+    new_table = (Shm_s*) lua_newuserdata(L, sizeof(Shm_s));
+    memcpy(new_table, table_struct, sizeof(Shm_s));
+    luaL_getmetatable(L, "fio.table");
+    lua_setmetatable(L, -2);
+    return 1;
+  }
+    lua_pop(GlobalTable, 1);
+
+  return 1;
 }
 /*-------------------------------------------------------------*/
 int fio_shm_close(lua_State *L)
 {
-  Shm_s *mem_struct;
-  const char *shm_name = luaL_checkstring(L, 1);
-  int res;
-  res = ht_get(ShmTable, (void*) shm_name, (void*) mem_struct);
-  if (res)
-    luaL_error(L, "Error getting shm [%s] from table: %d\n", shm_name, res);
-  lua_close(mem_struct->shL);
-  free(mem_struct);
-  res = ht_remove(ShmTable, (void*) shm_name, (void*) &mem_struct);
-  if (res)
-    luaL_error(L, "Error deleting shm entry [%s] from table: %d\n", shm_name, res);
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -260,7 +262,7 @@ static void init_mtx_table()
 /*-------------------------------------------------------------*/
 static void init_shm_table()
 {
-  ht_new(&ShmTable);
+  GlobalTable = luaL_newstate();
 }
 /*-------------------------------------------------------------*/
 
