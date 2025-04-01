@@ -34,10 +34,10 @@ cc nob.c -o nob
 | `join()` | Join the specified thread. |
 | `detach()` | Detach the specified thread. |
 | `getself()` | Return own thread id. |
-| `mutex_init("mutex_name")` | Initializes a dynamic mutex with a name __mutex_name__. |
-| `mutex_destroy("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
-| `mutex_lock("mutex_name")` | Locks specified mutex with a name __mutex_name__. |
-| `mutex_unlock("mutex_name")` | Unlocks specified mutex with a name __mutex_name__. |
+| `mutex_open("mutex_name")` | Initialize (or open existed) a dynamic mutex with a name __mutex_name__. |
+| `mutex_close("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
+| `lock()` | Locks specified mutex with a name __mutex_name__. |
+| `unlock()` | Unlocks specified mutex with a name __mutex_name__. |
 | `shm_open("shm_name")` | Create a shared memory object with a name __shm_name__. |
 | `shm_close("shm_name")` | Delete shared memory object with a name __shm_name__. |
 
@@ -48,24 +48,27 @@ Create two files __proc.lua__, __main.lua__ and run: `lua main.lua`
 ```lua
 --main.lua file
 local fio = require "fio"
-fio.mutex_init("mtxname")
+mtx = fio.mutex_open("mtxname")
 for i = 1, 100 do
     res = fio.start("proc.lua")
-    res:detach(res)
+    res:detach()
 end
 print("Main thread finish executing")
 os.execute("sleep " .. tonumber(3))
-fio.mutex_destroy("mtxname")
+print("Closing mutex")
+print(mtx)
+fio.mutex_close("mtxname")
 fio.exit()
 ```
 ### proc.lua
 ```lua
 --proc.lua file
+mtx = fio.mutex_open("mtxname")
 print("Hello from thread: " .. fio.getself())
-fio.mutex_lock("mtxname")
+mtx:lock()
 for i = -1, 1, 0.2 do
     print("i: " .. i, fio.getself())
 end
-fio.mutex_unlock("mtxname")
+mtx:unlock()
 print("Goodbye from thread: " .. fio.getself())
 ```
