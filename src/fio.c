@@ -40,7 +40,6 @@ typedef struct {
 
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
-//HashTable_s *MutexTable = NULL;
 lua_State *GlobalMutex = NULL;
 HashTable_s *ShmTable = NULL;
 
@@ -152,17 +151,16 @@ int fio_mutex_create(lua_State *L)
     return 1;
   }
   lua_pop(GlobalMutex, 1);
+  lua_pushstring(GlobalMutex, mutex_name);
   mutex_struct = (Mutex_s*) lua_newuserdata(GlobalMutex, sizeof(Mutex_s));
   res = pthread_mutex_init(&mutex_struct->mutex, NULL);
   if (res)
     luaL_error(L, "Error init new mutex: %s\n", strerror(errno));
-  lua_pushstring(GlobalMutex, mutex_name);
-  lua_pushvalue(GlobalMutex, -2);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
   /* Для обмена стеками возможно использовать lua_xmove() */
   mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
   memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
-  luaL_setmetatable(L, "fio.mutex");
+  luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
   return 1;
 }
