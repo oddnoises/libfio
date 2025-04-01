@@ -38,7 +38,6 @@ typedef struct {
   size_t users;
 } Shm_s;
 
-static pthread_mutex_t xmove_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 //HashTable_s *MutexTable = NULL;
@@ -136,7 +135,7 @@ int fio_getself(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_mutex_create(lua_State *L)
 {
-  Mutex_s *mutex_struct;
+  Mutex_s *mutex_struct, *mutex_new;
   const char *mutex_name = luaL_checkstring(L, 1);
   int res;
   res = pthread_once(&mtx_once, init_mtx_table);
@@ -145,9 +144,11 @@ int fio_mutex_create(lua_State *L)
   lua_pushstring(GlobalMutex, mutex_name);
   lua_rawget(GlobalMutex, LUA_REGISTRYINDEX);
   if (!lua_isnil(GlobalMutex, -1)) {  // mutex already exists
-    pthread_mutex_lock(&xmove_mutex);
-    lua_xmove(GlobalMutex, L, 1);
-    pthread_mutex_unlock(&xmove_mutex);
+    mutex_struct = (Mutex_s*) lua_touserdata(GlobalMutex, 1);
+    mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
+    memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+    luaL_getmetatable(L, "fio.mutex");
+    lua_setmetatable(L, -2);
     return 1;
   }
   lua_pop(GlobalMutex, 1);
@@ -158,9 +159,11 @@ int fio_mutex_create(lua_State *L)
   lua_pushstring(GlobalMutex, mutex_name);
   lua_pushvalue(GlobalMutex, -2);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
-  pthread_mutex_lock(&xmove_mutex);
-  lua_xmove(GlobalMutex, L, 1);
-  pthread_mutex_unlock(&xmove_mutex);
+  /* Для обмена стеками возможно использовать lua_xmove() */
+  mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
+  memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+  luaL_setmetatable(L, "fio.mutex");
+  lua_setmetatable(L, -2);
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -168,23 +171,38 @@ int fio_mutex_destroy(lua_State *L)
 {
   Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
-  int res;
+  lua_pushstring(GlobalMutex, mutex_name);
+  lua_rawget(GlobalMutex, LUA_REGISTRYINDEX);
+  if (lua_isnil(GlobalMutex, -1)) {
+    luaL_error(L, "Mutex [%s] doesn't exist!", mutex_name);
+    lua_pop(GlobalMutex, 1);
+    return 0;
+  }
+  mutex_struct = (Mutex_s*) lua_touserdata(GlobalMutex, 1);
+  pthread_mutex_destroy(&mutex_struct->mutex);
+  lua_pushstring(GlobalMutex, mutex_name);
+  lua_pushnil(GlobalMutex);
+  lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_mutex_lock(lua_State *L)
 {
-  Mutex_s *mutex_struct;
-  const char *mutex_name = luaL_checkstring(L, 1);
+  Mutex_s *mutex_struct = (Mutex_s*) luaL_checkudata(L, 1, "fio.mutex");
   int res;
+  res = pthread_mutex_lock(&mutex_struct->mutex);
+  if (res)
+    luaL_error(L, "Error lock mutex: %s\n", strerror(errno));
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_mutex_unlock(lua_State *L)
 {
-  Mutex_s *mutex_struct;
-  const char *mutex_name = luaL_checkstring(L, 1);
+  Mutex_s *mutex_struct = (Mutex_s*) luaL_checkudata(L, 1, "fio.mutex");
   int res;
+  res = pthread_mutex_unlock(&mutex_struct->mutex);
+  if (res)
+    luaL_error(L, "Error unlock mutex: %s\n", strerror(errno));
   return 0;
 }
 /*-------------------------------------------------------------*/
