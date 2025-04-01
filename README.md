@@ -31,13 +31,13 @@ cc nob.c -o nob
 | --- | --- |
 | `start("thread.lua")` | Creates a new POSIX thread that will execute the code from `thread.lua` file. This function returns thread id. |
 | `exit()` | Terminate current thread. This function __must__ be called only from parent thread. This is necessary to prevent early termination of child threads. |
-| `join()` | Join the specified thread. |
-| `detach()` | Detach the specified thread. |
+| `:join()` | Join the specified thread. |
+| `:detach()` | Detach the specified thread. |
 | `getself()` | Return own thread id. |
 | `mutex_open("mutex_name")` | Initialize (or open existed) a dynamic mutex with a name __mutex_name__. |
 | `mutex_close("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
-| `lock()` | Locks specified mutex with a name __mutex_name__. |
-| `unlock()` | Unlocks specified mutex with a name __mutex_name__. |
+| `:lock()` | Locks specified mutex with a name __mutex_name__. |
+| `:unlock()` | Unlocks specified mutex with a name __mutex_name__. |
 | `shm_open("shm_name")` | Create a shared memory object with a name __shm_name__. |
 | `shm_close("shm_name")` | Delete shared memory object with a name __shm_name__. |
 
