@@ -38,8 +38,12 @@ cc nob.c -o nob
 | `mutex_close("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
 | `:lock()` | Locks specified mutex with a name __mutex_name__. |
 | `:unlock()` | Unlocks specified mutex with a name __mutex_name__. |
-| `table_open("name")` | Create a shared (or open existed) table object with a name __shm_name__. |
+| ` tb = table_open("name")` | Create a shared (or open existed) table object with a name __shm_name__ and return it to a variable tb. |
+| `tb.key1 = "String"` | Insert string value into a table __tb__ by key __key1__. |
+| `str = tb.key1` | Get string value from table __tb__ by key __key1__. |
 | `table_close("name")` | Delete shared table object with a name __shm_name__. |
+
+
 
 # Example of use
 Create two files __proc.lua__, __main.lua__ and run: `lua main.lua`
