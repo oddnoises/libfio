@@ -19,6 +19,10 @@ int fio_mutex_destroy(lua_State *L);
 int fio_mutex_lock();
 int fio_mutex_unlock();
 int fio_exit();
+int fio_shm_open(lua_State *L);
+int fio_shm_close(lua_State *L);
+int fio_shm_set(lua_State *L);
+int fio_shm_get(lua_State *L);
 static void init_mtx_table();
 static void init_shm_table();
 
@@ -51,8 +55,8 @@ static const struct luaL_Reg fio_f [] = {
   {"getself", fio_getself},
   {"mutex_open", fio_mutex_create},
   {"mutex_close", fio_mutex_destroy},
-  {"table_open", NULL},
-  {"table_close", NULL},
+  {"table_open", fio_shm_open},
+  {"table_close", fio_shm_close},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -69,8 +73,9 @@ static const struct luaL_Reg fio_m_mutex [] = {
 };
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_m_table [] = {
-  {"__newindex", NULL},
-  {"__index", NULL},
+  {"__newindex", fio_shm_set},
+  {"__index", fio_shm_get},
+  {"close", fio_shm_close},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -219,40 +224,92 @@ int fio_mutex_unlock(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-int fio_shm_open(lua_State *L)
-{
-  Shm_s *table_struct, *new_table;
-  const char *table_name = luaL_checkstring(L, 1);
-  int res;
-  res = pthread_once(&shm_once, init_shm_table);
-  if (res)
-    luaL_error(L, "Error in pthread_once return %d: %s\n", res, strerror(errno));
-  lua_pushstring(GlobalTable, table_name);
-  lua_rawget(GlobalTable, LUA_REGISTRYINDEX);
-  if (!lua_isnil(GlobalTable, -1)) {
-    /* Table already exist, return obj */
-    table_struct = (Shm_s*) lua_touserdata(GlobalTable, 1);
-    new_table = (Shm_s*) lua_newuserdata(L, sizeof(Shm_s));
-    memcpy(new_table, table_struct, sizeof(Shm_s));
-    luaL_getmetatable(L, "fio.table");
-    lua_setmetatable(L, -2);
-    return 1;
-  }
-    lua_pop(GlobalTable, 1);
-
-  return 1;
-}
-/*-------------------------------------------------------------*/
-int fio_shm_close(lua_State *L)
-{
-  return 0;
-}
-/*-------------------------------------------------------------*/
 /* Если главный поток завершит работу, дочерние не перестанут выполняться */
 int fio_exit()
 {
   pthread_exit(NULL);
   return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_open(lua_State *L)
+{
+  Shm_s *table_struct;
+  const char *table_name = luaL_checkstring(L, 1);
+  int res;
+  res = pthread_once(&shm_once, init_shm_table);
+  if (res)
+    luaL_error(L, "Error in pthread_once return %d: %s\n", res, strerror(errno));
+  lua_getglobal(GlobalTable, table_name);
+  if (lua_istable(GlobalTable, -1)) {
+    /* Table already exist, return obj */
+    lua_pop(GlobalTable, 1);
+    table_struct = (Shm_s*) lua_newuserdata(L, sizeof(Shm_s));
+    table_struct->name = strdup(table_name);
+    luaL_getmetatable(L, "fio.table");
+    lua_setmetatable(L, -2);
+    return 1;
+  }
+  lua_pop(GlobalTable, 1);
+  lua_newtable(GlobalTable);
+  lua_setglobal(GlobalTable, table_name);
+  table_struct = (Shm_s*) lua_newuserdata(L, sizeof(Shm_s));
+  table_struct->name = strdup(table_name);
+  luaL_getmetatable(L, "fio.table");
+  lua_setmetatable(L, -2);
+  return 1;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_close(lua_State *L)
+{
+  (void) L;
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_shm_set(lua_State *L)
+{
+  Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
+  const char *newindex = luaL_checkstring(L, 2);
+  const char *str;
+  int type = lua_type(L, 3);
+  int val;
+  switch (type) {
+    case LUA_TSTRING:
+      str = luaL_checkstring(L, 3);
+      lua_getglobal(GlobalTable, table_struct->name);
+      lua_pushstring(GlobalTable, newindex);
+      lua_pushstring(GlobalTable, str);
+      lua_settable(GlobalTable, -3);
+      lua_pop(GlobalTable, 1);
+    break;
+    case LUA_TBOOLEAN:
+    break;
+    case LUA_TNUMBER:
+    break;
+    default:
+    break;
+  }
+  
+  return 0; 
+}
+/*-------------------------------------------------------------*/
+int fio_shm_get(lua_State *L)
+{
+  Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
+  const char *index = luaL_checkstring(L, 2);
+  const char *str;
+  int type;
+  lua_getglobal(GlobalTable, table_struct->name);
+  lua_pushstring(GlobalTable, index);
+  type = lua_gettable(GlobalTable, -2);
+  switch (type) {
+    case LUA_TSTRING:
+      str = luaL_checkstring(GlobalTable, -1);
+      lua_pushstring(L, str);
+    break;
+    default:
+    break;
+  }
+  return 1;
 }
 /*-------------------------------------------------------------*/
 static void init_mtx_table()
