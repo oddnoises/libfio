@@ -43,6 +43,7 @@ typedef struct {
   size_t users;
 } Shm_s;
 
+pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 lua_State *GlobalMutex = NULL;
@@ -272,6 +273,7 @@ int fio_shm_set(lua_State *L)
   const char *str;
   int type = lua_type(L, 3);
   int val;
+  pthread_mutex_lock(&shm_mutex);
   switch (type) {
     case LUA_TSTRING:
       str = luaL_checkstring(L, 3);
@@ -282,13 +284,33 @@ int fio_shm_set(lua_State *L)
       lua_pop(GlobalTable, 1);
     break;
     case LUA_TBOOLEAN:
+      val = luaL_checknumber(L, 3);
+      lua_getglobal(GlobalTable, table_struct->name);
+      lua_pushstring(GlobalTable, newindex);
+      lua_pushboolean(GlobalTable, val);
+      lua_settable(GlobalTable, -3);
+      lua_pop(GlobalTable, 1);
     break;
     case LUA_TNUMBER:
+      val = luaL_checknumber(L, 3);
+      lua_getglobal(GlobalTable, table_struct->name);
+      lua_pushstring(GlobalTable, newindex);
+      lua_pushnumber(GlobalTable, val);
+      lua_settable(GlobalTable, -3);
+      lua_pop(GlobalTable, 1);
+    break;
+    case LUA_TNIL:
+      lua_getglobal(GlobalTable, table_struct->name);
+      lua_pushstring(GlobalTable, newindex);
+      lua_pushnil(GlobalTable);
+      lua_settable(GlobalTable, -3);
+      lua_pop(GlobalTable, 1);
     break;
     default:
+      luaL_error(L, "Wrong type. Use only TSTRING, TBOOL, TNUMBER or TNIL!\n"); 
     break;
   }
-  
+  pthread_mutex_unlock(&shm_mutex);
   return 0; 
 }
 /*-------------------------------------------------------------*/
@@ -297,7 +319,8 @@ int fio_shm_get(lua_State *L)
   Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
   const char *index = luaL_checkstring(L, 2);
   const char *str;
-  int type;
+  int type, val;
+  pthread_mutex_lock(&shm_mutex);
   lua_getglobal(GlobalTable, table_struct->name);
   lua_pushstring(GlobalTable, index);
   type = lua_gettable(GlobalTable, -2);
@@ -306,9 +329,19 @@ int fio_shm_get(lua_State *L)
       str = luaL_checkstring(GlobalTable, -1);
       lua_pushstring(L, str);
     break;
+    case LUA_TBOOLEAN:
+      val = luaL_checknumber(GlobalTable, -1);
+      lua_pushboolean(L, val);
+    break;
+    case LUA_TNUMBER:
+      val = luaL_checknumber(GlobalTable, -1);
+      lua_pushnumber(L, val);
+    break;
     default:
+      lua_pushnil(L);
     break;
   }
+  pthread_mutex_unlock(&shm_mutex);
   return 1;
 }
 /*-------------------------------------------------------------*/
