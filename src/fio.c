@@ -284,7 +284,7 @@ int fio_shm_set(lua_State *L)
       lua_pop(GlobalTable, 1);
     break;
     case LUA_TBOOLEAN:
-      val = luaL_checknumber(L, 3);
+      val = lua_toboolean(GlobalTable, 3);
       lua_getglobal(GlobalTable, table_struct->name);
       lua_pushstring(GlobalTable, newindex);
       lua_pushboolean(GlobalTable, val);
@@ -330,7 +330,7 @@ int fio_shm_get(lua_State *L)
       lua_pushstring(L, str);
     break;
     case LUA_TBOOLEAN:
-      val = luaL_checknumber(GlobalTable, -1);
+      val = lua_toboolean(GlobalTable, -1);
       lua_pushboolean(L, val);
     break;
     case LUA_TNUMBER:
