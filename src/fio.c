@@ -27,8 +27,8 @@ int fio_shm_set(lua_State *L);
 int fio_shm_get(lua_State *L);
 int fio_queue_open(lua_State *L);
 int fio_queue_close(lua_State *L);
-int fio_queue_get(lua_State *L);
-int fio_queue_set(lua_State *L);
+int fio_queue_send(lua_State *L);
+int fio_queue_recv(lua_State *L);
 static void init_mtx_table();
 static void init_shm_table();
 static void init_queue_table();
@@ -398,7 +398,19 @@ int fio_queue_open(lua_State *L)
   lua_pop(GlobalQueue, 1);
   lua_pushstring(GlobalQueue, qname);
   queue_struct = (struct Queue_s*) lua_newuserdata(GlobalQueue, sizeof(struct Queue_s));
-
+  queue_struct->name = strdup(qname);
+  queue_struct->msg_head = queue_struct->msg_tail = NULL;
+  queue_struct->prev = queue_struct->next = NULL;
+  queue_struct->limit = limit;
+  queue_struct->count = 0;
+  pthread_mutex_init(&queue_struct->mtx, NULL);
+  pthread_cond_init(&queue_struct->send_sig, NULL);
+  pthread_cond_init(&queue_struct->recv_sig, NULL);
+  queue_struct->refs = 1;
+  lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata(L, queue_struct);
+  luaL_getmetatable(L, "fio.queue");
+  lua_setmetatable(L, -2);
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -408,13 +420,40 @@ int fio_queue_close(lua_State *L)
   return 0;
 }
 /*-------------------------------------------------------------*/
-int fio_queue_set(lua_State *L)
+int fio_queue_send(lua_State *L)
 {
-
+  int type, timeout, ret;
+  const char *str;
+  struct Msg_s *msg;
+  struct Queue_s *queue_struct = luaL_checkudata(L, 1, "fio.queue");
+  if (lua_gettop(L) < 2)
+    luaL_error(L, "Too few arguments! Usage: q:send(value, timeout)\n");
+  type = lua_type(L, 2);
+  switch (type) {
+    case LUA_TSTRING:
+      str = lua_tostring(L, 2);
+      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
+      msg->str = strdup(str);
+      msg->type = type;
+    break;
+    case LUA_TBOOLEAN:
+      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
+      msg->bool_val = lua_toboolean(L, 2);
+      msg->type = type;
+    break;
+    case LUA_TNUMBER:
+      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
+      msg->num = lua_tonumber(L, 2);
+      msg->type = type;
+    break;
+    default:
+      luaL_error(L, "Wrong type. Need string|bool|number\n");
+    break;
+  }
   return 0;
 }
 /*-------------------------------------------------------------*/
-int fio_queue_get(lua_State *L)
+int fio_queue_recv(lua_State *L)
 {
 
   return 1;
