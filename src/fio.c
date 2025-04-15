@@ -130,12 +130,12 @@ int luaopen_fio(lua_State *L)
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_setfuncs(L, fio_m_mutex, 0);
-  luaL_newmetatable(L, "fio.table");
-  luaL_setfuncs(L, fio_m_table, 0);
   luaL_newmetatable(L, "fio.queue");
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_setfuncs(L, fio_m_queue, 0);
+  luaL_newmetatable(L, "fio.table");
+  luaL_setfuncs(L, fio_m_table, 0);
   luaL_newlib(L, fio_f);
   return 1;
 }
@@ -195,7 +195,7 @@ int fio_getself(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_mutex_create(lua_State *L)
 {
-  Mutex_s *mutex_struct, *mutex_new;
+  Mutex_s *mutex_struct;
   const char *mutex_name = luaL_checkstring(L, 1);
   int res;
   res = pthread_once(&mtx_once, init_mtx_table);
@@ -205,8 +205,9 @@ int fio_mutex_create(lua_State *L)
   lua_rawget(GlobalMutex, LUA_REGISTRYINDEX);
   if (!lua_isnil(GlobalMutex, -1)) {  // mutex already exists
     mutex_struct = (Mutex_s*) lua_touserdata(GlobalMutex, 1);
-    mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
-    memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+    //mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
+    //memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+    lua_pushlightuserdata(L, mutex_struct);
     luaL_getmetatable(L, "fio.mutex");
     lua_setmetatable(L, -2);
     return 1;
@@ -395,7 +396,7 @@ int fio_queue_open(lua_State *L)
   struct Queue_s *queue_struct;
   const char *qname = luaL_checkstring(L, 1);
   int res, limit;
-  if (lua_isnumber(L, 2))
+  if (lua_gettop(L) == 2)
     limit = luaL_checkinteger(L, 2);
   else
    limit = 10;
@@ -407,6 +408,7 @@ int fio_queue_open(lua_State *L)
   if (!lua_isnil(GlobalQueue, -1)) {
     queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
     lua_pushlightuserdata(L, queue_struct);
+    //queue_new = (struct Queue_s*) lua_newuserdata(L, sizeof(struct Queue_s));
     luaL_getmetatable(L, "fio.queue");
     lua_setmetatable(L, -2);
     return 1;
@@ -414,6 +416,8 @@ int fio_queue_open(lua_State *L)
   lua_pop(GlobalQueue, 1);
   lua_pushstring(GlobalQueue, qname);
   queue_struct = (struct Queue_s*) lua_newuserdata(GlobalQueue, sizeof(struct Queue_s));
+  if (!queue_struct)
+    luaL_error(L, "New userdata is NULL!\n");
   queue_struct->name = strdup(qname);
   queue_struct->msg_head = queue_struct->msg_tail = NULL;
   queue_struct->prev = queue_struct->next = NULL;
@@ -425,6 +429,8 @@ int fio_queue_open(lua_State *L)
   queue_struct->refs = 1;
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
   lua_pushlightuserdata(L, queue_struct);
+  //queue_new = (struct Queue_s*) lua_newuserdata(L, sizeof(struct Queue_s));
+  //memcpy(queue_new, queue_struct, sizeof(struct Queue_s));
   luaL_getmetatable(L, "fio.queue");
   lua_setmetatable(L, -2);
   return 1;
@@ -442,6 +448,8 @@ int fio_queue_send(lua_State *L)
   const char *str;
   struct Msg_s *msg;
   struct Queue_s *queue_struct = luaL_checkudata(L, 1, "fio.queue");
+  if (!queue_struct)
+    luaL_error(L, "Udata is nil!\n");
   res = lua_gettop(L);
   if (res < 2)
     luaL_error(L, "Too few arguments! Usage: q:send(value, timeout)\n");
