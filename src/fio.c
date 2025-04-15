@@ -1,8 +1,10 @@
 #include <errno.h>
 #include <pthread.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <lua5.4/lauxlib.h>
 #include <lua5.4/lua.h>
 #include <lua5.4/lualib.h>
@@ -23,8 +25,13 @@ int fio_shm_open(lua_State *L);
 int fio_shm_close(lua_State *L);
 int fio_shm_set(lua_State *L);
 int fio_shm_get(lua_State *L);
+int fio_queue_open(lua_State *L);
+int fio_queue_close(lua_State *L);
+int fio_queue_get(lua_State *L);
+int fio_queue_set(lua_State *L);
 static void init_mtx_table();
 static void init_shm_table();
+static void init_queue_table();
 
 typedef struct {
   lua_State *L;
@@ -43,11 +50,32 @@ typedef struct {
   size_t users;
 } Shm_s;
 
+struct Msg_s {
+  char *str;
+  lua_Number num;
+  int bool_val;
+  size_t str_size;
+  int type;
+  struct Msg_s *next;
+};
+
+struct Queue_s {
+  char *name;
+  struct Msg_s *msg_head, *msg_tail;
+  int limit, count;
+  pthread_mutex_t mtx;
+  pthread_cond_t send_sig, recv_sig;
+  struct Queue_s *prev, *next;
+  int refs;
+};
+
 pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
+pthread_once_t que_once = PTHREAD_ONCE_INIT;
 lua_State *GlobalMutex = NULL;
 lua_State *GlobalTable = NULL;
+lua_State *GlobalQueue = NULL;
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
@@ -178,8 +206,9 @@ int fio_mutex_create(lua_State *L)
     luaL_error(L, "Error init new mutex: %s\n", strerror(errno));
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
   /* Для обмена стеками возможно использовать lua_xmove() */
-  mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
-  memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+  //mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
+  //memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
+  lua_pushlightuserdata(L, mutex_struct);
   luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
   return 1;
@@ -345,6 +374,52 @@ int fio_shm_get(lua_State *L)
   return 1;
 }
 /*-------------------------------------------------------------*/
+int fio_queue_open(lua_State *L)
+{
+  struct Queue_s *queue_struct;
+  const char *qname = luaL_checkstring(L, 1);
+  int res, limit;
+  if (lua_isnumber(L, 2))
+    limit = luaL_checkinteger(L, 2);
+  else
+   limit = 10;
+  res = pthread_once(&que_once, init_queue_table);
+  if (res)
+    luaL_error(L, "pthread_once return %d value: %s\n", res, strerror(errno));
+  lua_pushstring(GlobalQueue, qname);
+  lua_rawget(L, LUA_REGISTRYINDEX);
+  if (!lua_isnil(GlobalQueue, -1)) {
+    queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
+    lua_pushlightuserdata(L, queue_struct);
+    luaL_getmetatable(L, "fio.queue");
+    lua_setmetatable(L, -2);
+    return 1;
+  }
+  lua_pop(GlobalQueue, 1);
+  lua_pushstring(GlobalQueue, qname);
+  queue_struct = (struct Queue_s*) lua_newuserdata(GlobalQueue, sizeof(struct Queue_s));
+
+  return 1;
+}
+/*-------------------------------------------------------------*/
+int fio_queue_close(lua_State *L)
+{
+
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_queue_set(lua_State *L)
+{
+
+  return 0;
+}
+/*-------------------------------------------------------------*/
+int fio_queue_get(lua_State *L)
+{
+
+  return 1;
+}
+/*-------------------------------------------------------------*/
 static void init_mtx_table()
 {
   GlobalMutex = luaL_newstate();
@@ -353,6 +428,11 @@ static void init_mtx_table()
 static void init_shm_table()
 {
   GlobalTable = luaL_newstate();
+}
+/*-------------------------------------------------------------*/
+static void init_queue_table()
+{
+  GlobalQueue = luaL_newstate();
 }
 /*-------------------------------------------------------------*/
 
