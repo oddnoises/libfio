@@ -1,3 +1,4 @@
+#include <bits/time.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -29,9 +30,6 @@ int fio_queue_open(lua_State *L);
 int fio_queue_close(lua_State *L);
 int fio_queue_send(lua_State *L);
 int fio_queue_recv(lua_State *L);
-static void init_mtx_table();
-static void init_shm_table();
-static void init_queue_table();
 
 typedef struct {
   lua_State *L;
@@ -77,6 +75,12 @@ lua_State *GlobalMutex = NULL;
 lua_State *GlobalTable = NULL;
 lua_State *GlobalQueue = NULL;
 
+static int queue_send(struct Queue_s *q, struct Msg_s *msg, int timeout);
+static struct Msg_s *queue_recv(struct Queue_s *q, int timeout);
+static void init_mtx_table();
+static void init_shm_table();
+static void init_queue_table();
+
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
   {"start", fio_start},
@@ -86,6 +90,8 @@ static const struct luaL_Reg fio_f [] = {
   {"mutex_close", fio_mutex_destroy},
   {"table_open", fio_shm_open},
   {"table_close", fio_shm_close},
+  {"queue_open", fio_queue_open},
+  {"queue_close", fio_queue_close},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -108,6 +114,12 @@ static const struct luaL_Reg fio_m_table [] = {
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
+static const struct luaL_Reg fio_m_queue [] = {
+  {"send", fio_queue_send},
+  {"recv", fio_queue_recv},
+  {NULL, NULL}
+};
+/*-------------------------------------------------------------*/
 int luaopen_fio(lua_State *L)
 {
   luaL_newmetatable(L, "fio.thread");
@@ -120,6 +132,10 @@ int luaopen_fio(lua_State *L)
   luaL_setfuncs(L, fio_m_mutex, 0);
   luaL_newmetatable(L, "fio.table");
   luaL_setfuncs(L, fio_m_table, 0);
+  luaL_newmetatable(L, "fio.queue");
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_setfuncs(L, fio_m_queue, 0);
   luaL_newlib(L, fio_f);
   return 1;
 }
@@ -416,17 +432,18 @@ int fio_queue_open(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_queue_close(lua_State *L)
 {
-
+  (void) L;
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_queue_send(lua_State *L)
 {
-  int type, timeout, ret;
+  int type, timeout, res;
   const char *str;
   struct Msg_s *msg;
   struct Queue_s *queue_struct = luaL_checkudata(L, 1, "fio.queue");
-  if (lua_gettop(L) < 2)
+  res = lua_gettop(L);
+  if (res < 2)
     luaL_error(L, "Too few arguments! Usage: q:send(value, timeout)\n");
   type = lua_type(L, 2);
   switch (type) {
@@ -450,13 +467,123 @@ int fio_queue_send(lua_State *L)
       luaL_error(L, "Wrong type. Need string|bool|number\n");
     break;
   }
+  if (res < 3)
+    timeout = -1;
+  else
+    timeout = (int) lua_tointeger(L, 3);
+  res = queue_send(queue_struct, msg, timeout);
+  if (!res) {
+    if (type == LUA_TSTRING)
+      free(msg->str);
+    free(msg);
+  }
   return 0;
 }
 /*-------------------------------------------------------------*/
 int fio_queue_recv(lua_State *L)
 {
-
+  struct Queue_s *queue_struct = (struct Queue_s*) luaL_checkudata(L, 1, "fio.queue");
+  struct Msg_s *msg;
+  int timeout;
+  if (lua_gettop(L) < 2)
+    timeout = -1;
+  else
+    timeout = (int) luaL_checkinteger(L, 2);
+  msg = queue_recv(queue_struct, timeout);
+  if (msg) {
+    switch (msg->type) {
+      case LUA_TSTRING:
+        lua_pushstring(L, msg->str);
+      break;
+      case LUA_TBOOLEAN:
+        lua_pushboolean(L, msg->bool_val);
+      break;
+      case LUA_TNUMBER:
+        lua_pushnumber(L, msg->num);
+      break;
+      default:
+        lua_pushnil(L);
+      break;
+    }
+    if (msg->type == LUA_TSTRING)
+      free(msg->str);
+    free(msg);
+  } else
+    lua_pushnil(L);
   return 1;
+}
+/*-------------------------------------------------------------*/
+static int queue_send(struct Queue_s *q, struct Msg_s *msg, int timeout)
+{
+  struct timespec ts;
+  int res = 0;
+  pthread_mutex_lock(&q->mtx);
+  if (timeout > 0 && q->limit >= 0 && q->count + 1 > q->limit) {
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += timeout * 1000000L;
+    ts.tv_sec += ts.tv_nsec / 1000000000L;
+    ts.tv_nsec = ts.tv_nsec % 1000000000L;
+  }
+  while (timeout != 0 && q->limit >= 0 && q->count + 1 > q->limit) {
+    if (timeout > 0) {
+      if (pthread_cond_timedwait(&q->send_sig, &q->mtx, &ts))
+        break;
+    } else
+      pthread_cond_wait(&q->send_sig, &q->mtx);
+  }
+  if (q->limit < 0 || q->count + 1 <= q->limit) {
+    msg->next = NULL;
+    if (q->msg_tail)
+      q->msg_tail->next = msg;
+    q->msg_tail = msg;
+    if (!q->msg_head)
+      q->msg_head = msg;
+    q->count++;
+    pthread_cond_signal(&q->recv_sig);
+    res = 1;
+  } else
+    msg = NULL;
+  pthread_mutex_unlock(&q->mtx);
+  return res;
+}
+/*-------------------------------------------------------------*/
+static struct Msg_s *queue_recv(struct Queue_s *q, int timeout)
+{
+  struct Msg_s *msg = NULL;
+  struct timespec ts;
+  pthread_mutex_lock(&q->mtx);
+  if (q->limit >= 0) {
+    q->limit++;
+    pthread_cond_signal(&q->send_sig);
+  }
+  if (timeout > 0 && q->count <= 0) {
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += timeout * 1000000L;
+    ts.tv_sec += ts.tv_nsec / 1000000000L;
+    ts.tv_nsec = ts.tv_nsec % 1000000000L;
+  }
+  while (timeout != 0 && q->count <= 0) {
+    if (timeout > 0) {
+      if (pthread_cond_timedwait(&q->recv_sig, &q->mtx, &ts))
+        break;
+    } else
+      pthread_cond_wait(&q->recv_sig, &q->mtx);
+  }
+  if (q->count > 0) {
+    msg = q->msg_head;
+    if (msg) {
+      q->msg_head = msg->next;
+      if (!q->msg_head)
+        q->msg_tail = NULL;
+      msg->next = NULL;
+    }
+    q->count--;
+    pthread_cond_signal(&q->send_sig);
+  }
+  if (q->limit > 0)
+    q->limit--;
+  pthread_mutex_unlock(&q->mtx);
+  return msg;
 }
 /*-------------------------------------------------------------*/
 static void init_mtx_table()
