@@ -404,7 +404,7 @@ int fio_queue_open(lua_State *L)
   if (res)
     luaL_error(L, "pthread_once return %d value: %s\n", res, strerror(errno));
   lua_pushstring(GlobalQueue, qname);
-  lua_rawget(L, LUA_REGISTRYINDEX);
+  lua_rawget(GlobalQueue, LUA_REGISTRYINDEX);
   if (!lua_isnil(GlobalQueue, -1)) {
     queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
     lua_pushlightuserdata(L, queue_struct);
