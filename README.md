@@ -10,17 +10,8 @@ This project uses a [nob](https://github.com/tsoding/nob.h) build system, so it 
 
 ```bash
 git clone https://github.com/oddnoises/libfio.git
-```
-
-```bash
 cd fio
-```
-
-```bash
 cc nob.c -o nob
-```
-
-```bash
 ./nob
 ```
 > You can modify `nob.c` and binary will rebuild itself on its own.
@@ -38,14 +29,20 @@ cc nob.c -o nob
 | `mutex_close("mutex_name")` | Remove specified mutex with a name __mutex_name__. |
 | `:lock()` | Locks specified mutex with a name __mutex_name__. |
 | `:unlock()` | Unlocks specified mutex with a name __mutex_name__. |
-| ` tb = table_open("name")` | Create a shared (or open existed) table object with a name __shm_name__ and return it to a variable tb. |
+| ` table_open("name")` | Create a shared (or open existed) table object with a name __shm_name__ and return it to a variable tb. |
+| `table_close("name")` | Delete shared table object with a name __shm_name__. |
 | `tb.key1 = "String"` | Insert string value into a table __tb__ by key __key1__. |
 | `str = tb.key1` | Get string value from table __tb__ by key __key1__. |
-| `table_close("name")` | Delete shared table object with a name __shm_name__. |
+| `queue_open("qname", size)` | Create shared message queue with a name __qname__, default capacity is 10. This function returns userdata object of created queue. |
+| `queue_close("qname")` | Delete shared message queue with a name __qname__. |
+| `:send(value, timeout)` | Send a message in queue with timeout in ms. Default timeout is -1. Supporting values is string, bool and numbers. |
+| `:recv(timeout)` | Receive a message from queue with timeout. Default timeout is -1 |
 
 
 
 # Example of use
+## Creating threads and using mutexes
+
 Create two files __proc.lua__, __main.lua__ and run: `lua main.lua`
 
 ### main.lua
@@ -75,4 +72,38 @@ for i = -1, 1, 0.2 do
 end
 mtx:unlock()
 print("Goodbye from thread: " .. fio.getself())
+```
+## Using shared tables
+```lua
+local fio = require "fio"
+tbl = fio.table_open("tblname")
+
+tbl.stringval = "Test string"
+tbl.numval = 123
+tbl.boolval = true
+
+tmp = tbl.numval
+print("tmp = ", tmp)
+
+tmp = tbl.stringval
+print("tmp = ", tmp)
+
+tmp = tbl.boolval
+print("tmp = ", tmp)
+fio.table_close("tblname")
+```
+
+## Using message queues
+```lua
+local fio = require "fio"
+
+q = fio.queue_open("qname")	-- 10 elements by default
+q:send("string") -- without timeout
+q:send(123, 1000) -- with timeout = 1000 ms
+q:send(true)
+
+print("Received:", q:recv())
+print("Received:", q:recv())
+print("Received:", q:recv())
+fio.queue_close("qname")
 ```
