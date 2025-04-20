@@ -435,6 +435,7 @@ int fio_queue_open(lua_State *L)
   queue_struct->refs = 1;
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
   lua_pushlightuserdata(L, queue_struct);
+  printf("Created queue limit: %d\n", queue_struct->limit);
   //queue_new = (struct Queue_s*) lua_newuserdata(L, sizeof(struct Queue_s));
   //memcpy(queue_new, queue_struct, sizeof(struct Queue_s));
   luaL_getmetatable(L, "fio.queue");
@@ -477,7 +478,7 @@ int fio_queue_recv(lua_State *L)
   res = unpack_data(L, msg);
   if (res > 1 || !res)
     luaL_error(L, "Error after unpacking\n");
-  return 0;
+  return 1;
 }
 /*-------------------------------------------------------------*/
 static int queue_send(struct Queue_s *q, struct Msg_s *msg, int timeout)
