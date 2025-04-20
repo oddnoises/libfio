@@ -1,6 +1,7 @@
 #include <bits/time.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,11 +50,12 @@ typedef struct {
 } Shm_s;
 
 struct Msg_s {
-  char *str;
-  lua_Number num;
-  int bool_val;
-  size_t str_size;
   int type;
+  size_t len;
+  lua_Integer lint;
+  lua_Number lnum;
+  bool isint;
+  void *data;
   struct Msg_s *next;
 };
 
@@ -80,6 +82,10 @@ static struct Msg_s *queue_recv(struct Queue_s *q, int timeout);
 static void init_mtx_table();
 static void init_shm_table();
 static void init_queue_table();
+static struct Msg_s *pack_data(lua_State *L);
+static inline int pack_set(lua_State *L, int index, struct Msg_s *msg);
+static int unpack_data(lua_State *L, struct Msg_s *msg);
+static inline int unpack_set(lua_State *L, struct Msg_s *msg);
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
@@ -444,47 +450,17 @@ int fio_queue_close(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_queue_send(lua_State *L)
 {
-  int type, timeout, res;
-  const char *str;
+  int timeout, res;
   struct Msg_s *msg;
   struct Queue_s *queue_struct = luaL_checkudata(L, 1, "fio.queue");
   if (!queue_struct)
     luaL_error(L, "Udata is nil!\n");
   res = lua_gettop(L);
-  if (res < 2)
-    luaL_error(L, "Too few arguments! Usage: q:send(value, timeout)\n");
-  type = lua_type(L, 2);
-  switch (type) {
-    case LUA_TSTRING:
-      str = lua_tostring(L, 2);
-      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
-      msg->str = strdup(str);
-      msg->type = type;
-    break;
-    case LUA_TBOOLEAN:
-      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
-      msg->bool_val = lua_toboolean(L, 2);
-      msg->type = type;
-    break;
-    case LUA_TNUMBER:
-      msg = (struct Msg_s*) malloc(sizeof(struct Msg_s));
-      msg->num = lua_tonumber(L, 2);
-      msg->type = type;
-    break;
-    default:
-      luaL_error(L, "Wrong type. Need string|bool|number\n");
-    break;
-  }
   if (res < 3)
-    timeout = -1;
-  else
-    timeout = (int) lua_tointeger(L, 3);
+    return luaL_error(L, "Too few arguments! Usage: q:send(timeout, value)\n");
+  timeout = lua_tointeger(L, 2);
+  msg = pack_data(L);
   res = queue_send(queue_struct, msg, timeout);
-  if (!res) {
-    if (type == LUA_TSTRING)
-      free(msg->str);
-    free(msg);
-  }
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -492,33 +468,16 @@ int fio_queue_recv(lua_State *L)
 {
   struct Queue_s *queue_struct = (struct Queue_s*) luaL_checkudata(L, 1, "fio.queue");
   struct Msg_s *msg;
-  int timeout;
+  int timeout, res;
   if (lua_gettop(L) < 2)
     timeout = -1;
   else
     timeout = (int) luaL_checkinteger(L, 2);
   msg = queue_recv(queue_struct, timeout);
-  if (msg) {
-    switch (msg->type) {
-      case LUA_TSTRING:
-        lua_pushstring(L, msg->str);
-      break;
-      case LUA_TBOOLEAN:
-        lua_pushboolean(L, msg->bool_val);
-      break;
-      case LUA_TNUMBER:
-        lua_pushnumber(L, msg->num);
-      break;
-      default:
-        lua_pushnil(L);
-      break;
-    }
-    if (msg->type == LUA_TSTRING)
-      free(msg->str);
-    free(msg);
-  } else
-    lua_pushnil(L);
-  return 1;
+  res = unpack_data(L, msg);
+  if (res > 1 || !res)
+    luaL_error(L, "Error after unpacking\n");
+  return 0;
 }
 /*-------------------------------------------------------------*/
 static int queue_send(struct Queue_s *q, struct Msg_s *msg, int timeout)
@@ -609,4 +568,93 @@ static void init_queue_table()
   GlobalQueue = luaL_newstate();
 }
 /*-------------------------------------------------------------*/
-
+static struct Msg_s *pack_data(lua_State *L)
+{
+  struct Msg_s *parent = NULL, *msg = NULL;
+  for (int i = 3; i <= lua_gettop(L); i++) {
+    if (!msg)
+      msg = parent = malloc(sizeof(struct Msg_s));
+    else
+     msg = msg->next = malloc(sizeof(struct Msg_s));
+    msg->type = msg->len = 0;
+    msg->data = msg->next = NULL;
+    pack_set(L, i, msg);
+  }
+  return msg;
+}
+/*-------------------------------------------------------------*/
+static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
+{
+  const char *str;
+  int type = lua_type(L, index);
+  switch (type) {
+    case LUA_TNIL:
+      msg->type = type;
+    break;
+    case LUA_TBOOLEAN:
+      msg->type = type;
+      msg->data = lua_toboolean(L, index) ? (void*) 1 : NULL;
+    break;
+    case LUA_TNUMBER:
+      msg->type = type;
+      if (lua_isinteger(L, index)) {
+        msg->lnum = 0;
+        msg->isint = true;
+        msg->lint = lua_tointeger(L, index);
+      } else {
+        msg->lint = 0;
+        msg->isint = false;
+        msg->lnum = lua_tonumber(L, index);
+      }
+    break;
+    case LUA_TSTRING:
+      msg->type = type;
+      str = lua_tolstring(L, index, (size_t*)&msg->len);
+      if (msg->len > 0)
+        msg->data = memmove(malloc(msg->len), str, msg->len);
+    break;
+  }
+  return 0;
+}
+/*-------------------------------------------------------------*/
+static int unpack_data(lua_State *L, struct Msg_s *msg)
+{
+  int res = 0;
+  struct Msg_s *head = NULL;
+  while (msg) {
+    unpack_set(L, msg);
+    head = msg;
+    msg = msg->next;
+    free(head);
+    res++;
+  }
+  return res;
+}
+/*-------------------------------------------------------------*/
+static inline int unpack_set(lua_State *L, struct Msg_s *msg)
+{
+  switch (msg->type) {
+    case LUA_TNIL:
+      lua_pushnil(L);
+    break;
+    case LUA_TBOOLEAN:
+      lua_pushboolean(L, msg->data ? 1 : 0);
+    break;
+    case LUA_TNUMBER:
+      if (msg->isint)
+        lua_pushinteger(L, msg->lint);
+      else
+       lua_pushnumber(L, msg->lnum);
+    break;
+    case LUA_TSTRING:
+      lua_pushlstring(L, msg->data, msg->len);
+      if (msg->len > 0)
+        free(msg->data);
+    break;
+    default:
+      return luaL_error(L, "Unpack error\n");
+    break;
+  }
+  return 0;
+}
+/*-------------------------------------------------------------*/
