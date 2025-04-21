@@ -84,8 +84,10 @@ static void init_shm_table();
 static void init_queue_table();
 static struct Msg_s *pack_data(lua_State *L);
 static inline int pack_set(lua_State *L, int index, struct Msg_s *msg);
+static inline void pack_table(lua_State *L, int index, struct Msg_s *msg);
 static int unpack_data(lua_State *L, struct Msg_s *msg);
 static inline int unpack_set(lua_State *L, struct Msg_s *msg);
+static inline void unpack_table(lua_State *L, struct Msg_s *msg);
 
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
@@ -614,8 +616,45 @@ static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
       if (msg->len > 0)
         msg->data = memmove(malloc(msg->len), str, msg->len);
     break;
+    case LUA_TLIGHTUSERDATA:
+      msg->data = (void*) lua_touserdata(L, index);
+    break;
+    case LUA_TTABLE:
+      pack_table(L, index, msg);
+    break;
+    default:
+      luaL_error(L, "Type is not supported!\n");
+      return -1;
+    break;
   }
   return 0;
+}
+/*-------------------------------------------------------------*/
+static inline void pack_table(lua_State *L, int index, struct Msg_s *msg)
+{
+  struct Msg_s *parent = NULL, *key = NULL, *val = NULL;
+  int top = lua_gettop(L);
+  int kpos = top + 1;
+  int vpos = top + 2;
+  int res;
+  lua_pushnil(L);
+  while (lua_next(L, index)) {
+    if (!parent) {
+      key = parent = malloc(sizeof(struct Msg_s));
+      val = parent->next = malloc(sizeof(struct Msg_s));
+    } else {
+      key = val->next = malloc(sizeof(struct Msg_s));
+      val = key->next = malloc(sizeof(struct Msg_s));
+    }
+    key->data = val->data = val->next = NULL;
+    res = pack_set(L, kpos, key);
+    if (res) {
+
+    }
+    pack_set(L, vpos, val);
+    lua_pop(L, 1);
+  }
+  msg->data = parent;
 }
 /*-------------------------------------------------------------*/
 static int unpack_data(lua_State *L, struct Msg_s *msg)
@@ -657,5 +696,24 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
     break;
   }
   return 0;
+}
+/*-------------------------------------------------------------*/
+static inline void unpack_table(lua_State *L, struct Msg_s *msg)
+{
+  struct Msg_s *pkey = NULL, *pval = NULL;
+  struct Msg_s *key = msg;
+  struct Msg_s *val = msg->next;
+  while (key && val) {
+    unpack_set(L, key);
+    unpack_set(L, val);
+    lua_rawset(L, -3);
+    pkey = key;
+    pval = val;
+    key = val->next;
+    if (key)
+      val = key->next;
+    free(pkey);
+    free(pval);
+  }
 }
 /*-------------------------------------------------------------*/
