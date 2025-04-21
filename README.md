@@ -35,7 +35,7 @@ cc nob.c -o nob
 | `str = tb.key1` | Get string value from table __tb__ by key __key1__. |
 | `queue_open("qname", size)` | Create shared message queue with a name __qname__, default capacity is 10. This function returns userdata object of created queue. |
 | `queue_close("qname")` | Delete shared message queue with a name __qname__. |
-| `:send(value, timeout)` | Send a message in queue with timeout in ms. Default timeout is -1. Supporting values is string, bool and numbers. |
+| `:send(timeout, value)` | Send a message in queue with timeout in ms. For blocking call timeout must be -1. Supporting values is string, bool, numbers and tables. |
 | `:recv(timeout)` | Receive a message from queue with timeout. Default timeout is -1 |
 
 
@@ -95,15 +95,46 @@ fio.table_close("tblname")
 
 ## Using message queues
 ```lua
-local fio = require "fio"
+fio = require "fio"
+q = fio.queue_open("qname")
 
-q = fio.queue_open("qname")	-- 10 elements by default
-q:send("string") -- without timeout
-q:send(123, 1000) -- with timeout = 1000 ms
-q:send(true)
+print(q)
 
+tbl = {skey = "Hello world!", nkey = 123, bkey = true}
+rectbl = {r = 123, g = 456, b = 789}
+tbl.tbkey = rectbl
+
+str = "Test string"
+print("Sending string...")
+q:send(-1, str)
 print("Received:", q:recv())
+
+num = 777
+print("Sending num...")
+q:send(-1, num)
 print("Received:", q:recv())
+
+bl = true
+print("Sending bool...")
+q:send(-1, bl)
 print("Received:", q:recv())
+
+print("Sending table...")
+for key, val in pairs(tbl) do
+  print(key, val)
+end
+q:send(-1, tbl)
+
+rtbl = q:recv()
+
+print("Received table:")
+print(rtbl)
+for key, val in pairs(rtbl) do
+  print(key, val)
+end
+print("Recursive table:")
+for key, val in pairs(rtbl.tbkey) do
+  print(key, val)
+end
 fio.queue_close("qname")
 ```
