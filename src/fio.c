@@ -38,7 +38,7 @@ typedef struct {
 } Proc;
 
 typedef struct {
-  pthread_mutex_t *mutex;
+  pthread_mutex_t mutex;
   char *name;
   size_t users;
 } Mutex_s;
@@ -222,16 +222,11 @@ int fio_mutex_create(lua_State *L)
   lua_pop(GlobalMutex, 1);
   lua_pushstring(GlobalMutex, mutex_name);
   mutex_struct = (Mutex_s*) lua_newuserdata(GlobalMutex, sizeof(Mutex_s));
-  mutex_struct->mutex = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-  if (mutex_struct->mutex == NULL)
-    luaL_error(L, "Error allocate mem for mutex [%s]: %s\n", mutex_name, strerror(errno));
-  res = pthread_mutex_init(mutex_struct->mutex, NULL);
+  res = pthread_mutex_init(&mutex_struct->mutex, NULL);
   if (res)
     luaL_error(L, "Error init new mutex: %s\n", strerror(errno));
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
   /* Для обмена стеками возможно использовать lua_xmove() */
-  //mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
-  //memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
   lua_pushlightuserdata(L, mutex_struct);
   luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
@@ -250,8 +245,7 @@ int fio_mutex_destroy(lua_State *L)
     return 0;
   }
   mutex_struct = (Mutex_s*) lua_touserdata(GlobalMutex, 1);
-  pthread_mutex_destroy(mutex_struct->mutex);
-  free(mutex_struct->mutex);
+  pthread_mutex_destroy(&mutex_struct->mutex);
   lua_pushstring(GlobalMutex, mutex_name);
   lua_pushnil(GlobalMutex);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
@@ -262,7 +256,7 @@ int fio_mutex_lock(lua_State *L)
 {
   Mutex_s *mutex_struct = (Mutex_s*) luaL_checkudata(L, 1, "fio.mutex");
   int res;
-  res = pthread_mutex_lock(mutex_struct->mutex);
+  res = pthread_mutex_lock(&mutex_struct->mutex);
   if (res)
     luaL_error(L, "Error lock mutex: %s\n", strerror(errno));
   return 0;
@@ -272,7 +266,7 @@ int fio_mutex_unlock(lua_State *L)
 {
   Mutex_s *mutex_struct = (Mutex_s*) luaL_checkudata(L, 1, "fio.mutex");
   int res;
-  res = pthread_mutex_unlock(mutex_struct->mutex);
+  res = pthread_mutex_unlock(&mutex_struct->mutex);
   if (res)
     luaL_error(L, "Error unlock mutex: %s\n", strerror(errno));
   return 0;
