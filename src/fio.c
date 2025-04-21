@@ -447,7 +447,29 @@ int fio_queue_open(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_queue_close(lua_State *L)
 {
-  (void) L;
+  struct Queue_s *queue_struct = NULL;
+  const char *qname = luaL_checkstring(L, 1);
+  struct Msg_s *msg = NULL, *last = NULL;
+  lua_pushstring(GlobalQueue, qname);
+  lua_rawget(GlobalQueue, LUA_REGISTRYINDEX);
+  if (lua_isnil(L, -1)) {
+    luaL_error(L, "Queue [%s] doesn't exist!\n", qname);
+    return 0;
+  }
+  queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
+  pthread_mutex_destroy(&queue_struct->mtx);
+  pthread_cond_destroy(&queue_struct->send_sig);
+  pthread_cond_destroy(&queue_struct->recv_sig);
+  lua_pushstring(GlobalQueue, qname);
+  lua_pushnil(GlobalQueue);
+  lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
+  free(queue_struct->name);
+  msg = queue_struct->msg_head;
+  while (msg) {
+    last = msg;
+    msg = msg->next;
+    free(last);
+  }
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -690,6 +712,14 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
       lua_pushlstring(L, msg->data, msg->len);
       if (msg->len > 0)
         free(msg->data);
+    break;
+    case LUA_TLIGHTUSERDATA:
+      lua_pushlightuserdata(L, msg->data);
+    break;
+    case LUA_TTABLE:
+      lua_newtable(L);
+      if (msg->data)
+        unpack_table(L, msg->data);
     break;
     default:
       return luaL_error(L, "Unpack error\n");
