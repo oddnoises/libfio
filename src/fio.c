@@ -65,8 +65,8 @@ struct Queue_s {
   int limit, count;
   pthread_mutex_t mtx;
   pthread_cond_t send_sig, recv_sig;
-  struct Queue_s *prev, *next;
-  int refs;
+  //struct Queue_s *prev, *next;
+  //int refs;
 };
 
 pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -88,7 +88,6 @@ static inline void pack_table(lua_State *L, int index, struct Msg_s *msg);
 static int unpack_data(lua_State *L, struct Msg_s *msg);
 static inline int unpack_set(lua_State *L, struct Msg_s *msg);
 static inline void unpack_table(lua_State *L, struct Msg_s *msg);
-
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
   {"start", fio_start},
@@ -428,13 +427,13 @@ int fio_queue_open(lua_State *L)
     luaL_error(L, "New userdata is NULL!\n");
   queue_struct->name = strdup(qname);
   queue_struct->msg_head = queue_struct->msg_tail = NULL;
-  queue_struct->prev = queue_struct->next = NULL;
+  //queue_struct->prev = queue_struct->next = NULL;
   queue_struct->limit = limit;
   queue_struct->count = 0;
   pthread_mutex_init(&queue_struct->mtx, NULL);
   pthread_cond_init(&queue_struct->send_sig, NULL);
   pthread_cond_init(&queue_struct->recv_sig, NULL);
-  queue_struct->refs = 1;
+  //queue_struct->refs = 1;
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
   lua_pushlightuserdata(L, queue_struct);
   printf("Created queue limit: %d\n", queue_struct->limit);
@@ -447,19 +446,19 @@ int fio_queue_open(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_queue_close(lua_State *L)
 {
-  struct Queue_s *queue_struct = NULL;
+  struct Queue_s *queue_struct;
   const char *qname = luaL_checkstring(L, 1);
-  struct Msg_s *msg = NULL, *last = NULL;
+  struct Msg_s *msg = NULL, *last;
   lua_pushstring(GlobalQueue, qname);
   lua_rawget(GlobalQueue, LUA_REGISTRYINDEX);
-  if (lua_isnil(L, -1)) {
+  if (lua_isnil(GlobalQueue, -1)) {
     luaL_error(L, "Queue [%s] doesn't exist!\n", qname);
     return 0;
   }
   queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
   pthread_mutex_destroy(&queue_struct->mtx);
-  pthread_cond_destroy(&queue_struct->send_sig);
   pthread_cond_destroy(&queue_struct->recv_sig);
+  pthread_cond_destroy(&queue_struct->send_sig);
   lua_pushstring(GlobalQueue, qname);
   lua_pushnil(GlobalQueue);
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
@@ -612,16 +611,15 @@ static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
 {
   const char *str;
   int type = lua_type(L, index);
+  msg->type = type;
   switch (type) {
     case LUA_TNIL:
-      msg->type = type;
+
     break;
     case LUA_TBOOLEAN:
-      msg->type = type;
       msg->data = lua_toboolean(L, index) ? (void*) 1 : NULL;
     break;
     case LUA_TNUMBER:
-      msg->type = type;
       if (lua_isinteger(L, index)) {
         msg->lnum = 0;
         msg->isint = true;
@@ -633,7 +631,6 @@ static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
       }
     break;
     case LUA_TSTRING:
-      msg->type = type;
       str = lua_tolstring(L, index, (size_t*)&msg->len);
       if (msg->len > 0)
         msg->data = memmove(malloc(msg->len), str, msg->len);
@@ -706,7 +703,7 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
       if (msg->isint)
         lua_pushinteger(L, msg->lint);
       else
-       lua_pushnumber(L, msg->lnum);
+        lua_pushnumber(L, msg->lnum);
     break;
     case LUA_TSTRING:
       lua_pushlstring(L, msg->data, msg->len);
@@ -718,8 +715,8 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
     break;
     case LUA_TTABLE:
       lua_newtable(L);
-      if (msg->data)
-        unpack_table(L, msg->data);
+        if (msg->data)
+          unpack_table(L, msg->data);
     break;
     default:
       return luaL_error(L, "Unpack error\n");
@@ -747,3 +744,4 @@ static inline void unpack_table(lua_State *L, struct Msg_s *msg)
   }
 }
 /*-------------------------------------------------------------*/
+
