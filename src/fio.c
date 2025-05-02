@@ -60,13 +60,10 @@ struct Msg_s {
 };
 
 struct Queue_s {
-  char *name;
   struct Msg_s *msg_head, *msg_tail;
   int limit, count;
   pthread_mutex_t mtx;
   pthread_cond_t send_sig, recv_sig;
-  //struct Queue_s *prev, *next;
-  //int refs;
 };
 
 pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -178,6 +175,13 @@ int fio_start(lua_State *L)
   return 1;
 }
 /*-------------------------------------------------------------*/
+/* Если главный поток завершит работу, дочерние не перестанут выполняться */
+int fio_exit()
+{
+  pthread_exit(NULL);
+  return 0;
+}
+/*-------------------------------------------------------------*/
 int fio_join(lua_State *L)
 {
   Proc *this_thread = (Proc*) luaL_checkudata(L, 1, "fio.thread");
@@ -212,8 +216,6 @@ int fio_mutex_create(lua_State *L)
   lua_rawget(GlobalMutex, LUA_REGISTRYINDEX);
   if (!lua_isnil(GlobalMutex, -1)) {  // mutex already exists
     mutex_struct = (Mutex_s*) lua_touserdata(GlobalMutex, 1);
-    //mutex_new = (Mutex_s*) lua_newuserdata(L, sizeof(Mutex_s));
-    //memcpy(mutex_new, mutex_struct, sizeof(Mutex_s));
     lua_pushlightuserdata(L, mutex_struct);
     luaL_getmetatable(L, "fio.mutex");
     lua_setmetatable(L, -2);
@@ -269,13 +271,6 @@ int fio_mutex_unlock(lua_State *L)
   res = pthread_mutex_unlock(&mutex_struct->mutex);
   if (res)
     luaL_error(L, "Error unlock mutex: %s\n", strerror(errno));
-  return 0;
-}
-/*-------------------------------------------------------------*/
-/* Если главный поток завершит работу, дочерние не перестанут выполняться */
-int fio_exit()
-{
-  pthread_exit(NULL);
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -406,10 +401,10 @@ int fio_queue_open(lua_State *L)
     luaL_error(L, "pthread_once return %d value: %s\n", res, strerror(errno));
   lua_pushstring(GlobalQueue, qname);
   lua_rawget(GlobalQueue, LUA_REGISTRYINDEX);
+  /* If queue obj already exist */
   if (!lua_isnil(GlobalQueue, -1)) {
     queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
     lua_pushlightuserdata(L, queue_struct);
-    //queue_new = (struct Queue_s*) lua_newuserdata(L, sizeof(struct Queue_s));
     luaL_getmetatable(L, "fio.queue");
     lua_setmetatable(L, -2);
     return 1;
@@ -419,20 +414,14 @@ int fio_queue_open(lua_State *L)
   queue_struct = (struct Queue_s*) lua_newuserdata(GlobalQueue, sizeof(struct Queue_s));
   if (!queue_struct)
     luaL_error(L, "New userdata is NULL!\n");
-  queue_struct->name = strdup(qname);
   queue_struct->msg_head = queue_struct->msg_tail = NULL;
-  //queue_struct->prev = queue_struct->next = NULL;
   queue_struct->limit = limit;
   queue_struct->count = 0;
   pthread_mutex_init(&queue_struct->mtx, NULL);
   pthread_cond_init(&queue_struct->send_sig, NULL);
   pthread_cond_init(&queue_struct->recv_sig, NULL);
-  //queue_struct->refs = 1;
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
   lua_pushlightuserdata(L, queue_struct);
-  printf("Created queue limit: %d\n", queue_struct->limit);
-  //queue_new = (struct Queue_s*) lua_newuserdata(L, sizeof(struct Queue_s));
-  //memcpy(queue_new, queue_struct, sizeof(struct Queue_s));
   luaL_getmetatable(L, "fio.queue");
   lua_setmetatable(L, -2);
   return 1;
@@ -456,7 +445,6 @@ int fio_queue_close(lua_State *L)
   lua_pushstring(GlobalQueue, qname);
   lua_pushnil(GlobalQueue);
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
-  free(queue_struct->name);
   msg = queue_struct->msg_head;
   while (msg) {
     last = msg;
@@ -479,7 +467,11 @@ int fio_queue_send(lua_State *L)
   timeout = lua_tointeger(L, 2);
   msg = pack_data(L);
   res = queue_send(queue_struct, msg, timeout);
-  return 0;
+  if (res)
+    lua_pushboolean(L, 1);
+  else
+    lua_pushboolean(L, 0);
+  return 1;
 }
 /*-------------------------------------------------------------*/
 int fio_queue_recv(lua_State *L)
@@ -493,8 +485,10 @@ int fio_queue_recv(lua_State *L)
     timeout = (int) luaL_checkinteger(L, 2);
   msg = queue_recv(queue_struct, timeout);
   res = unpack_data(L, msg);
-  if (res > 1 || !res)
+  if (res > 1 || !res) {
     luaL_error(L, "Error after unpacking\n");
+    lua_pushnil(L);
+  }
   return 1;
 }
 /*-------------------------------------------------------------*/
