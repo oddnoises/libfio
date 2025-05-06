@@ -10,7 +10,6 @@
 #include <lua5.4/lauxlib.h>
 #include <lua5.4/lua.h>
 #include <lua5.4/lualib.h>
-#include "hashtable.h"
 
 int luaopen_fio(lua_State *L);
 static void *fio_thread(void *arg);
