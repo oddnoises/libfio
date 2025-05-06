@@ -2,7 +2,7 @@
 
 Fio is a multithreading library for Lua. It can create POSIX threads and provides basic synchronisation mechanism. Fio is designed to be as simple as posible to provide simple and easy to learn examples of using Lua API.
 
-Fio supports Lua 5.4 and requires only C compiler and the Lua interpreter itself.
+Fio supports Lua 5.3/5.4 and requires only C compiler and the Lua interpreter itself.
 
 # Build
 
