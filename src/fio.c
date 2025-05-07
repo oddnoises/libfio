@@ -43,7 +43,6 @@ typedef struct {
 } Mutex_s;
 
 typedef struct {
-  lua_State *shL;
   char *name;
   size_t users;
 } Shm_s;
@@ -303,7 +302,16 @@ int fio_shm_open(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_shm_close(lua_State *L)
 {
-  (void) L;
+  const char *table_name = luaL_checkstring(L, 1);
+  lua_getglobal(GlobalTable, table_name);
+  if (lua_istable(GlobalTable, -1)) {
+    lua_pushnil(GlobalTable);
+    lua_setglobal(GlobalTable, table_name);
+    lua_gc(GlobalTable, LUA_GCCOLLECT, 0);
+    return 0;
+  }
+  lua_pop(GlobalTable, 1);
+  luaL_error(L, "Table [%s] doen't exist!\n", table_name);
   return 0;
 }
 /*-------------------------------------------------------------*/
