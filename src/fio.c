@@ -64,7 +64,6 @@ struct Queue_s {
   pthread_cond_t send_sig, recv_sig;
 };
 
-pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 pthread_once_t que_once = PTHREAD_ONCE_INIT;
@@ -300,6 +299,7 @@ int fio_shm_open(lua_State *L)
   return 1;
 }
 /*-------------------------------------------------------------*/
+// TODO need to implement proper memory free
 int fio_shm_close(lua_State *L)
 {
   const char *table_name = luaL_checkstring(L, 1);
@@ -318,79 +318,61 @@ int fio_shm_close(lua_State *L)
 int fio_shm_set(lua_State *L)
 {
   Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
+  struct Msg_s *data, *tmp;
   const char *newindex = luaL_checkstring(L, 2);
-  const char *str;
-  int type = lua_type(L, 3);
-  int val;
-  pthread_mutex_lock(&shm_mutex);
-  switch (type) {
-    case LUA_TSTRING:
-      str = luaL_checkstring(L, 3);
-      lua_getglobal(GlobalTable, table_struct->name);
-      lua_pushstring(GlobalTable, newindex);
-      lua_pushstring(GlobalTable, str);
-      lua_settable(GlobalTable, -3);
-      lua_pop(GlobalTable, 1);
-    break;
-    case LUA_TBOOLEAN:
-      val = lua_toboolean(GlobalTable, 3);
-      lua_getglobal(GlobalTable, table_struct->name);
-      lua_pushstring(GlobalTable, newindex);
-      lua_pushboolean(GlobalTable, val);
-      lua_settable(GlobalTable, -3);
-      lua_pop(GlobalTable, 1);
-    break;
-    case LUA_TNUMBER:
-      val = luaL_checknumber(L, 3);
-      lua_getglobal(GlobalTable, table_struct->name);
-      lua_pushstring(GlobalTable, newindex);
-      lua_pushnumber(GlobalTable, val);
-      lua_settable(GlobalTable, -3);
-      lua_pop(GlobalTable, 1);
-    break;
-    case LUA_TNIL:
-      lua_getglobal(GlobalTable, table_struct->name);
-      lua_pushstring(GlobalTable, newindex);
-      lua_pushnil(GlobalTable);
-      lua_settable(GlobalTable, -3);
-      lua_pop(GlobalTable, 1);
-    break;
-    default:
-      luaL_error(L, "Wrong type. Use only TSTRING, TBOOL, TNUMBER or TNIL!\n"); 
-    break;
+  int type;
+  lua_getglobal(GlobalTable, table_struct->name);
+  lua_pushstring(GlobalTable, newindex);
+  type = lua_gettable(GlobalTable, -2);
+  if (type == LUA_TLIGHTUSERDATA) {
+    data = lua_touserdata(GlobalTable, 1); 
+    while (data) {
+      tmp = data;
+      data = data->next;
+      free(tmp);
+    }
   }
-  pthread_mutex_unlock(&shm_mutex);
+  lua_pop(GlobalTable, 1);
+  data = pack_data(L);
+  if (data->type == LUA_TTABLE) {
+    luaL_error(L, "Table is not supported yet!\n");
+    return 0;
+  }
+  lua_getglobal(GlobalTable, table_struct->name);
+  lua_pushstring(GlobalTable, newindex);
+  lua_pushlightuserdata(GlobalTable, data);
+  lua_settable(GlobalTable, -3);
+  lua_pop(GlobalTable, 1);
   return 0; 
 }
 /*-------------------------------------------------------------*/
 int fio_shm_get(lua_State *L)
 {
   Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
+  struct Msg_s *data;
   const char *index = luaL_checkstring(L, 2);
-  const char *str;
-  int type, val;
-  pthread_mutex_lock(&shm_mutex);
+  int res = 0, type;
   lua_getglobal(GlobalTable, table_struct->name);
   lua_pushstring(GlobalTable, index);
   type = lua_gettable(GlobalTable, -2);
-  switch (type) {
-    case LUA_TSTRING:
-      str = luaL_checkstring(GlobalTable, -1);
-      lua_pushstring(L, str);
-    break;
-    case LUA_TBOOLEAN:
-      val = lua_toboolean(GlobalTable, -1);
-      lua_pushboolean(L, val);
-    break;
-    case LUA_TNUMBER:
-      val = luaL_checknumber(GlobalTable, -1);
-      lua_pushnumber(L, val);
-    break;
-    default:
-      lua_pushnil(L);
-    break;
+  if (type != LUA_TLIGHTUSERDATA) {
+    luaL_error(L, "Returned type is not luserdata. type = %s", lua_typename(L, type));
   }
-  pthread_mutex_unlock(&shm_mutex);
+  data = lua_touserdata(GlobalTable, -1);
+  if (!data) {
+    luaL_error(L, "Returned data is NULL\n");
+    lua_pushnil(L);
+    return 1;
+  }
+  while (data) {
+    unpack_set(L, data);
+    data = data->next;
+    res++;
+  }
+  if (res > 1 || !res) {
+    luaL_error(L, "Error unpacking table field. res = %d\n", res);
+    lua_pushnil(L);
+  }
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -714,7 +696,7 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
           unpack_table(L, msg->data);
     break;
     default:
-      return luaL_error(L, "Unpack error\n");
+      return luaL_error(L, "Unpack error. Try to unpack [%d] data type\n", msg->type);
     break;
   }
   return 0;
