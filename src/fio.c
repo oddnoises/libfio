@@ -1,4 +1,3 @@
-#include <bits/time.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -229,6 +228,7 @@ int fio_mutex_create(lua_State *L)
   lua_pushlightuserdata(L, mutex_struct);
   luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -248,6 +248,7 @@ int fio_mutex_destroy(lua_State *L)
   lua_pushstring(GlobalMutex, mutex_name);
   lua_pushnil(GlobalMutex);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -296,6 +297,7 @@ int fio_shm_open(lua_State *L)
   table_struct->name = strdup(table_name);
   luaL_getmetatable(L, "fio.table");
   lua_setmetatable(L, -2);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -321,6 +323,7 @@ int fio_shm_set(lua_State *L)
   struct Msg_s *data, *tmp;
   const char *newindex = luaL_checkstring(L, 2);
   int type;
+  printf("[DEBUG]: %d: Add new value by index [%s]\n", __LINE__, newindex);
   lua_getglobal(GlobalTable, table_struct->name);
   lua_pushstring(GlobalTable, newindex);
   type = lua_gettable(GlobalTable, -2);
@@ -342,7 +345,7 @@ int fio_shm_set(lua_State *L)
   lua_pushstring(GlobalTable, newindex);
   lua_pushlightuserdata(GlobalTable, data);
   lua_settable(GlobalTable, -3);
-  lua_pop(GlobalTable, 1);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 0; 
 }
 /*-------------------------------------------------------------*/
@@ -373,6 +376,7 @@ int fio_shm_get(lua_State *L)
     luaL_error(L, "Error unpacking table field. res = %d\n", res);
     lua_pushnil(L);
   }
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -413,6 +417,7 @@ int fio_queue_open(lua_State *L)
   lua_pushlightuserdata(L, queue_struct);
   luaL_getmetatable(L, "fio.queue");
   lua_setmetatable(L, -2);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -440,6 +445,7 @@ int fio_queue_close(lua_State *L)
     msg = msg->next;
     free(last);
   }
+  lua_settop(GlobalTable, 0); // temporary solution
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -460,6 +466,7 @@ int fio_queue_send(lua_State *L)
     lua_pushboolean(L, 1);
   else
     lua_pushboolean(L, 0);
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -478,6 +485,7 @@ int fio_queue_recv(lua_State *L)
     luaL_error(L, "Error after unpacking\n");
     lua_pushnil(L);
   }
+  lua_settop(GlobalTable, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -719,6 +727,33 @@ static inline void unpack_table(lua_State *L, struct Msg_s *msg)
     free(pkey);
     free(pval);
   }
+}
+/*-------------------------------------------------------------*/
+static void print_stack(lua_State *L)
+{
+  int top = lua_gettop(L);
+  printf("[DEBUG]: Begin stack dump--------------------------------\n");
+  for (int i = 1; i <= top; i++) {
+    printf("%d\t%s\t", i, luaL_typename(L,i));
+    switch (lua_type(L, i)) {
+      case LUA_TNUMBER:
+        printf("%g\n",lua_tonumber(L,i));
+        break;
+      case LUA_TSTRING:
+        printf("%s\n",lua_tostring(L,i));
+        break;
+      case LUA_TBOOLEAN:
+        printf("%s\n", (lua_toboolean(L, i) ? "true" : "false"));
+        break;
+      case LUA_TNIL:
+        printf("%s\n", "nil");
+        break;
+      default:
+        printf("%p\n",lua_topointer(L,i));
+        break;
+    }
+  }
+  printf("[DEBUG]: End stack dump--------------------------------\n");
 }
 /*-------------------------------------------------------------*/
 
