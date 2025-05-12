@@ -228,7 +228,7 @@ int fio_mutex_create(lua_State *L)
   lua_pushlightuserdata(L, mutex_struct);
   luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalMutex, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -248,7 +248,7 @@ int fio_mutex_destroy(lua_State *L)
   lua_pushstring(GlobalMutex, mutex_name);
   lua_pushnil(GlobalMutex);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalMutex, 0); // temporary solution
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -323,7 +323,7 @@ int fio_shm_set(lua_State *L)
   struct Msg_s *data, *tmp;
   const char *newindex = luaL_checkstring(L, 2);
   int type;
-  printf("[DEBUG]: %d: Add new value by index [%s]\n", __LINE__, newindex);
+  //printf("[DEBUG]: %d: Add new value by index [%s]\n", __LINE__, newindex);
   lua_getglobal(GlobalTable, table_struct->name);
   lua_pushstring(GlobalTable, newindex);
   type = lua_gettable(GlobalTable, -2);
@@ -417,7 +417,7 @@ int fio_queue_open(lua_State *L)
   lua_pushlightuserdata(L, queue_struct);
   luaL_getmetatable(L, "fio.queue");
   lua_setmetatable(L, -2);
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalQueue, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -445,7 +445,7 @@ int fio_queue_close(lua_State *L)
     msg = msg->next;
     free(last);
   }
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalQueue, 0); // temporary solution
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -466,7 +466,7 @@ int fio_queue_send(lua_State *L)
     lua_pushboolean(L, 1);
   else
     lua_pushboolean(L, 0);
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalQueue, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -485,7 +485,7 @@ int fio_queue_recv(lua_State *L)
     luaL_error(L, "Error after unpacking\n");
     lua_pushnil(L);
   }
-  lua_settop(GlobalTable, 0); // temporary solution
+  lua_settop(GlobalQueue, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
