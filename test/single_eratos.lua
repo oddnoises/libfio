@@ -1,5 +1,5 @@
 local prime = {}
-local n = 100
+local n = 10000000
 local nextbase = 3
 --local nthreads = 1
 
@@ -39,13 +39,15 @@ local res = 0
 
 --for i = 1, nthreads do
 res = worker()
-print(res, "values of base done")
+--print(res, "values of base done")
 --end
 
 local nprimes = 1
 for i = 3, n do
   if (prime[i]) then
     nprimes = nprimes + 1
-    print(i)
+    --print(i)
   end
 end
+print(nprimes, "prime numbers was calculated")
+

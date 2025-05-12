@@ -63,6 +63,7 @@ struct Queue_s {
   pthread_cond_t send_sig, recv_sig;
 };
 
+pthread_mutex_t tbl_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_once_t mtx_once = PTHREAD_ONCE_INIT;
 pthread_once_t shm_once = PTHREAD_ONCE_INIT;
 pthread_once_t que_once = PTHREAD_ONCE_INIT;
@@ -228,7 +229,7 @@ int fio_mutex_create(lua_State *L)
   lua_pushlightuserdata(L, mutex_struct);
   luaL_getmetatable(L, "fio.mutex");
   lua_setmetatable(L, -2);
-  lua_settop(GlobalMutex, 0); // temporary solution
+  //lua_settop(GlobalMutex, 0); // temporary solution
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -248,7 +249,7 @@ int fio_mutex_destroy(lua_State *L)
   lua_pushstring(GlobalMutex, mutex_name);
   lua_pushnil(GlobalMutex);
   lua_rawset(GlobalMutex, LUA_REGISTRYINDEX);
-  lua_settop(GlobalMutex, 0); // temporary solution
+  //lua_settop(GlobalMutex, 0); // temporary solution
   return 0;
 }
 /*-------------------------------------------------------------*/
@@ -275,6 +276,7 @@ int fio_mutex_unlock(lua_State *L)
 int fio_shm_open(lua_State *L)
 {
   Shm_s *table_struct;
+  //pthread_mutex_lock(&tbl_mutex);
   const char *table_name = luaL_checkstring(L, 1);
   int res;
   res = pthread_once(&shm_once, init_shm_table);
@@ -298,6 +300,7 @@ int fio_shm_open(lua_State *L)
   luaL_getmetatable(L, "fio.table");
   lua_setmetatable(L, -2);
   lua_settop(GlobalTable, 0); // temporary solution
+  //pthread_mutex_unlock(&tbl_mutex);
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -319,6 +322,7 @@ int fio_shm_close(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_shm_set(lua_State *L)
 {
+  pthread_mutex_lock(&tbl_mutex);
   Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
   struct Msg_s *data, *tmp;
   const char *newindex = luaL_checkstring(L, 2);
@@ -346,11 +350,13 @@ int fio_shm_set(lua_State *L)
   lua_pushlightuserdata(GlobalTable, data);
   lua_settable(GlobalTable, -3);
   lua_settop(GlobalTable, 0); // temporary solution
+  pthread_mutex_unlock(&tbl_mutex);
   return 0; 
 }
 /*-------------------------------------------------------------*/
 int fio_shm_get(lua_State *L)
 {
+  pthread_mutex_lock(&tbl_mutex);
   Shm_s *table_struct = (Shm_s*) luaL_checkudata(L, 1, "fio.table");
   struct Msg_s *data;
   const char *index = luaL_checkstring(L, 2);
@@ -377,6 +383,7 @@ int fio_shm_get(lua_State *L)
     lua_pushnil(L);
   }
   lua_settop(GlobalTable, 0); // temporary solution
+  pthread_mutex_unlock(&tbl_mutex);
   return 1;
 }
 /*-------------------------------------------------------------*/
