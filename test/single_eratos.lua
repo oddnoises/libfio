@@ -49,5 +49,5 @@ for i = 3, n do
     --print(i)
   end
 end
-print(nprimes, "prime numbers was calculated")
+print(nprimes, "prime numbers was calculated from", n)
 

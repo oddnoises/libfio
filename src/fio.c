@@ -341,8 +341,8 @@ int fio_shm_set(lua_State *L)
   }
   lua_pop(GlobalTable, 1);
   data = pack_data(L);
-  if (data->type == LUA_TTABLE) {
-    luaL_error(L, "Table is not supported yet!\n");
+  if (data->type == LUA_TTABLE || data->type == LUA_TSTRING) {
+    luaL_error(L, "Table and string is not supported yet!\n");
     return 0;
   }
   lua_getglobal(GlobalTable, table_struct->name);

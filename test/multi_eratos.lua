@@ -6,7 +6,7 @@ shared = fio.table_open("shared")
 
 
 
-shared.n = 10000000
+shared.n = 100
 shared.nextbase = 3
 nthreads = 12
 
@@ -38,7 +38,7 @@ local nprimes = 1
 for i = 3, shared.n do
   if (prime[i]) then
     nprimes = nprimes + 1
-    --print(i)
+    print(i)
   end
 end
 
