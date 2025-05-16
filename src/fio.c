@@ -29,6 +29,7 @@ int fio_queue_open(lua_State *L);
 int fio_queue_close(lua_State *L);
 int fio_queue_send(lua_State *L);
 int fio_queue_recv(lua_State *L);
+int fio_get_fulludata(lua_State *L);
 
 typedef struct {
   lua_State *L;
@@ -53,6 +54,7 @@ struct Msg_s {
   lua_Number lnum;
   bool isint;
   void *data;
+  void *udata;
   struct Msg_s *next;
 };
 
@@ -82,6 +84,7 @@ static inline void pack_table(lua_State *L, int index, struct Msg_s *msg);
 static int unpack_data(lua_State *L, struct Msg_s *msg);
 static inline int unpack_set(lua_State *L, struct Msg_s *msg);
 static inline void unpack_table(lua_State *L, struct Msg_s *msg);
+static void print_stack(lua_State *L);
 /*-------------------------------------------------------------*/
 static const struct luaL_Reg fio_f [] = {
   {"start", fio_start},
@@ -93,6 +96,7 @@ static const struct luaL_Reg fio_f [] = {
   {"table_close", fio_shm_close},
   {"queue_open", fio_queue_open},
   {"queue_close", fio_queue_close},
+  {"udata_conv", fio_get_fulludata},
   {NULL, NULL}
 };
 /*-------------------------------------------------------------*/
@@ -138,6 +142,16 @@ int luaopen_fio(lua_State *L)
   luaL_newmetatable(L, "fio.table");
   luaL_setfuncs(L, fio_m_table, 0);
   luaL_newlib(L, fio_f);
+  return 1;
+}
+/*-------------------------------------------------------------*/
+int fio_get_fulludata(lua_State *L)
+{
+  //void **tosend = lua_touserdata(L, 1);
+  const char *uname = luaL_checkstring(L, 2);
+  lua_pushvalue(L, 1);
+  luaL_getmetatable(L, uname);
+  lua_setmetatable(L, -2);
   return 1;
 }
 /*-------------------------------------------------------------*/
@@ -389,7 +403,7 @@ int fio_shm_get(lua_State *L)
 /*-------------------------------------------------------------*/
 int fio_queue_open(lua_State *L)
 {
-  struct Queue_s *queue_struct;
+  struct Queue_s *queue_struct, *new;
   const char *qname = luaL_checkstring(L, 1);
   int res, limit;
   if (lua_gettop(L) == 2)
@@ -404,7 +418,8 @@ int fio_queue_open(lua_State *L)
   /* If queue obj already exist */
   if (!lua_isnil(GlobalQueue, -1)) {
     queue_struct = (struct Queue_s*) lua_touserdata(GlobalQueue, 1);
-    lua_pushlightuserdata(L, queue_struct);
+    new = lua_newuserdata(L, sizeof(struct Queue_s));
+    memmove(new, queue_struct, sizeof(struct Queue_s));
     luaL_getmetatable(L, "fio.queue");
     lua_setmetatable(L, -2);
     return 1;
@@ -421,7 +436,8 @@ int fio_queue_open(lua_State *L)
   pthread_cond_init(&queue_struct->send_sig, NULL);
   pthread_cond_init(&queue_struct->recv_sig, NULL);
   lua_rawset(GlobalQueue, LUA_REGISTRYINDEX);
-  lua_pushlightuserdata(L, queue_struct);
+  new = lua_newuserdata(L, sizeof(struct Queue_s));
+  memmove(new, queue_struct, sizeof(struct Queue_s));
   luaL_getmetatable(L, "fio.queue");
   lua_setmetatable(L, -2);
   lua_settop(GlobalQueue, 0); // temporary solution
@@ -604,6 +620,7 @@ static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
   const char *str;
   int type = lua_type(L, index);
   msg->type = type;
+  //printf("[DEBUG]: Sendig type %d:%s\n", type, lua_typename(L, type));
   switch (type) {
     case LUA_TNIL:
 
@@ -629,6 +646,9 @@ static inline int pack_set(lua_State *L, int index, struct Msg_s *msg)
     break;
     case LUA_TLIGHTUSERDATA:
       msg->data = (void*) lua_touserdata(L, index);
+    break;
+    case LUA_TUSERDATA:
+      msg->udata = (void*) lua_touserdata(L, index);
     break;
     case LUA_TTABLE:
       pack_table(L, index, msg);
@@ -704,6 +724,9 @@ static inline int unpack_set(lua_State *L, struct Msg_s *msg)
     break;
     case LUA_TLIGHTUSERDATA:
       lua_pushlightuserdata(L, msg->data);
+    break;
+    case LUA_TUSERDATA:
+      lua_pushlightuserdata(L, msg->udata);
     break;
     case LUA_TTABLE:
       lua_newtable(L);
