@@ -20,7 +20,7 @@ while true do
             file_content = file:read("*a")
             file:close()
         else
-            print("Ошибка чтения файла:", err)
+            print("Error reading file:", err)
         end
         -- http response
         local response = "HTTP/1.1 200 OK\r\n"
