@@ -1,40 +1,35 @@
--- wget --delete-after http://0.0.0.0/
 local socket = require("socket")
-local fio = require "fio"
-q = fio.queue_open("qname")
 
-PORT=80
-BACKLOG=5
+local HOST = "0.0.0.0"
+local PORT = 8080
 
-server=assert(socket.tcp())
-assert(server:bind("*", PORT))
-server:listen(BACKLOG)
-
-local ip, port = server:getsockname()
-print("Listening on IP="..ip..", PORT="..port.."...")
-local cnt = 0
-while 1 do
-	-- wait for a connection from any client
-	local client, err = server:accept()
-	print(client)
-	print(q)
-	q:send(-1, client)
-	local udat = q:recv()
-	local newcl = fio.udata_conv(udat, "tcp{client}")
-	print(newcl)
-
-	if newcl then
-		local line, err = newcl:receive()
-		-- if there was no error, send it back to the client
-		if not err then
-			newcl:send("HTTP/1.0 200 OKnnnAnswer from server!")
-		end
-
-	else
-		print("Error happened while getting the connection.nError: "..err)
-	end
-	cnt = cnt + 1
-	-- done with client, close the object
-	newcl:close()
-	print("Closed: " .. cnt)
+local server = assert(socket.bind(HOST, PORT))
+server:settimeout(0)
+print("Server active at http://" .. HOST .. ":" .. PORT)
+while true do
+    local client = server:accept()
+    if client then
+        -- read http request
+        local request = client:receive("*l") or ""
+        --print("Request:", request)
+        local path = request:match("^GET /(.-) HTTP") or "index"
+        -- workload
+        local file_content = "Default response"
+        local file, err = io.open(path .. ".txt", "r")
+        if file then
+            file_content = file:read("*a")
+            file:close()
+        else
+            print("Ошибка чтения файла:", err)
+        end
+        -- http response
+        local response = "HTTP/1.1 200 OK\r\n"
+            .. "Content-Type: text/plain\r\n"
+            .. "Connection: close\r\n\r\n"
+            .. "Содержимое файла '" .. path .. "':\n" .. file_content
+        -- sending response
+        client:send(response)
+        client:close()
+    end
+    socket.sleep(0.01)
 end
